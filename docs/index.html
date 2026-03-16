@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>ITSM Pro — Live Demo</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,sans-serif;background:#0D1B2A;color:#E2E8F0;padding:40px 20px;min-height:100vh}
+.wrap{max-width:900px;margin:0 auto}
+h1{font-size:36px;font-weight:800;margin-bottom:6px}
+h1 span{color:#60A5FA}
+.sub{color:#64748B;margin-bottom:40px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+a.card{background:#161B22;border:1px solid #30363D;border-radius:10px;padding:20px;text-decoration:none;color:#E2E8F0;display:block;transition:border-color .2s}
+a.card:hover{border-color:#2563EB}
+.icon{font-size:30px;margin-bottom:10px}
+.title{font-size:15px;font-weight:700;margin-bottom:5px}
+.desc{font-size:12px;color:#8B949E;line-height:1.5}
+.badge{display:inline-block;margin-top:8px;font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;background:#1E3A5F;color:#60A5FA}
+h2{font-size:13px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.1em;margin:32px 0 12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⚡ ITSM<span>Pro</span></h1>
+  <p class="sub">Enterprise IT Service Management — All 7 Modules · Interactive Prototypes</p>
+
+  <h2>📋 Module Prototypes</h2>
+  <div class="grid">
+    <a href="itsmpro_part1_foundation.html" class="card">
+      <div class="icon">🔐</div>
+      <div class="title">Part 1 — Foundation & Auth</div>
+      <div class="desc">Authentication, JWT, RBAC, User Management, Dashboard</div>
+      <div class="badge">Part 1 of 7</div>
+    </a>
+    <a href="itsmpro_part2_employee_imac.html" class="card">
+      <div class="icon">👥</div>
+      <div class="title">Part 2 — Employee & IMAC</div>
+      <div class="desc">Employee Management, Org Chart, 3-Level IMAC Approval</div>
+      <div class="badge">Part 2 of 7</div>
+    </a>
+    <a href="itsmpro_part3_incidents_sr.html" class="card">
+      <div class="icon">🚨</div>
+      <div class="title">Part 3 — Incidents & Service Requests</div>
+      <div class="desc">Incident Management (P1–P4, SLA), Service Catalog</div>
+      <div class="badge">Part 3 of 7</div>
+    </a>
+    <a href="itsmpro_part4_problem_change.html" class="card">
+      <div class="icon">🔍</div>
+      <div class="title">Part 4 — Problem & Change</div>
+      <div class="desc">Root Cause Analysis, KEDB, CAB Voting, Change Lifecycle</div>
+      <div class="badge">Part 4 of 7</div>
+    </a>
+    <a href="itsmpro_part5_cmdb.html" class="card">
+      <div class="icon">🖥️</div>
+      <div class="title">Part 5 — Asset & CMDB</div>
+      <div class="desc">Configuration Items, Topology Graph, License Management</div>
+      <div class="badge">Part 5 of 7</div>
+    </a>
+    <a href="itsmpro_part6_kb_sla.html" class="card">
+      <div class="icon">📚</div>
+      <div class="title">Part 6 — Knowledge Base & SLA</div>
+      <div class="desc">KB Articles, SLA Policies, Escalation Rules Engine</div>
+      <div class="badge">Part 6 of 7</div>
+    </a>
+    <a href="itsmpro_part7_reports.html" class="card">
+      <div class="icon">📊</div>
+      <div class="title">Part 7 — Reports & Integrations</div>
+      <div class="desc">Analytics, 8 Report Templates, 12 Integration Connectors</div>
+      <div class="badge">Part 7 of 7</div>
+    </a>
+  </div>
+
+  <h2>🚀 Deployment Guides</h2>
+  <div class="grid">
+    <a href="itsmpro_deploy_guide.html" class="card">
+      <div class="icon">🐧</div>
+      <div class="title">Linux Deployment Guide</div>
+      <div class="desc">17-step interactive guide for Ubuntu 22.04 production deployment</div>
+    </a>
+    <a href="itsmpro_wsl2_guide.html" class="card">
+      <div class="icon">🪟</div>
+      <div class="title">Windows WSL2 Guide</div>
+      <div class="desc">14-step guide for running ITSM Pro on Windows via WSL2</div>
+    </a>
+    <a href="itsmpro_windows_deploy.html" class="card">
+      <div class="icon">🐳</div>
+      <div class="title">All Windows Methods</div>
+      <div class="desc">WSL2, Native, Docker Desktop, Windows Server</div>
+    </a>
+  </div>
+  <p style="margin-top:40px;text-align:center;font-size:11px;color:#334155">
+    ITSM Pro · Node.js 20 + PostgreSQL 15 + React 18 · 100% Open Source
+  </p>
+</div>
+</body>
+</html>

@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ITSM Pro — Part 4: Problem & Change Management</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;background:#F0F4F8;overflow-x:hidden}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:3px}
+input,select,textarea{font-family:inherit}
+@keyframes slideUp{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes slideIn{from{transform:translateX(16px);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useMemo,useRef}=React;
+
+// ══════════════════════════════════════════════════════════════
+// ITSM PRO — Part 4: Problem Management + Change Management
+// ══════════════════════════════════════════════════════════════
+
+const C={
+  sb:'#0D1B2A',sbBorder:'rgba(255,255,255,0.07)',sbText:'#8899AA',
+  sbActive:'rgba(59,130,246,0.12)',sbActiveTxt:'#93C5FD',sbHover:'rgba(255,255,255,0.04)',
+  primary:'#2563EB',primaryH:'#1D4ED8',primaryLt:'#EFF6FF',
+  success:'#059669',successLt:'#ECFDF5',
+  warning:'#D97706',warningLt:'#FFFBEB',
+  danger:'#DC2626',dangerLt:'#FEF2F2',
+  purple:'#7C3AED',purpleLt:'#F5F3FF',
+  cyan:'#0891B2',cyanLt:'#ECFEFF',
+  orange:'#EA580C',orangeLt:'#FFF7ED',
+  teal:'#0D9488',tealLt:'#F0FDFA',
+  bg:'#F0F4F8',card:'#FFFFFF',border:'#E2E8F0',borderFaint:'#F1F5F9',
+  t1:'#0F172A',t2:'#475569',t3:'#94A3B8',
+};
+
+const ROLE_META={
+  SUPER_ADMIN:{label:'Super Admin',color:'#7C3AED',bg:'#F5F3FF',border:'#DDD6FE'},
+  ADMIN:{label:'Admin',color:'#2563EB',bg:'#EFF6FF',border:'#BFDBFE'},
+  EMPLOYEE:{label:'Employee',color:'#059669',bg:'#ECFDF5',border:'#A7F3D0'},
+  HELPDESK:{label:'Helpdesk',color:'#D97706',bg:'#FFFBEB',border:'#FDE68A'},
+  AGENT:{label:'Agent',color:'#0891B2',bg:'#ECFEFF',border:'#A5F3FC'},
+  SERVICE_MANAGER:{label:'Service Mgr',color:'#DC2626',bg:'#FEF2F2',border:'#FECACA'},
+};
+
+// Problem states and config
+const PROB_STATUS=['Open','Under Investigation','Root Cause Identified','Known Error','Fix In Progress','Resolved','Closed'];
+const PROB_IMPACT=['Low','Medium','High','Critical'];
+const PROB_CATS=['Hardware','Software','Network','Security','Access','Application','Database','Infrastructure','Other'];
+
+// Change types and risk levels
+const CHG_TYPES={
+  Standard:{label:'Standard Change',color:C.success,bg:C.successLt,border:'#A7F3D0',icon:'📋',desc:'Pre-approved, low-risk, routine change',cab:false,risk:'Low'},
+  Normal:{label:'Normal Change',color:C.primary,bg:C.primaryLt,border:'#BFDBFE',icon:'🔧',desc:'Requires CAB review and approval',cab:true,risk:'Medium'},
+  Emergency:{label:'Emergency Change',color:C.danger,bg:C.dangerLt,border:'#FECACA',icon:'🚨',desc:'Urgent, bypass standard CAB – post review required',cab:false,risk:'High'},
+};
+const CHG_STATUS=['Draft','Submitted','CAB Review','CAB Approved','Scheduled','In Progress','Completed','Failed','Rolled Back','Cancelled'];
+const CHG_CATS=['Network','Server/VM','Application','Database','Security','Storage','Cloud','Telecom','Facilities','Process'];
+const RISK_LEVELS=['Low','Medium','High','Critical'];
+const CHG_IMPACT=['Minimal','Minor','Moderate','Major','Critical'];
+
+// CAB members (role-based)
+const CAB_ROLES=['SERVICE_MANAGER','ADMIN','SUPER_ADMIN'];
+
+const now=()=>new Date().toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const today=()=>new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const daysFrom=(d)=>new Date(Date.now()+d*86400000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const daysAgo=d=>new Date(Date.now()-d*86400000).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const hoursAgo=h=>new Date(Date.now()-h*3600000).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+const genId=pfx=>pfx+'-'+String(Date.now()).slice(-5)+Math.random().toString(36).substr(2,2).toUpperCase();
+const initials=n=>(n||'U').split(' ').map(w=>w[0]||'').join('').toUpperCase().substr(0,2);
+const avatarColor=str=>{const cols=['#2563EB','#7C3AED','#059669','#D97706','#DC2626','#0891B2','#9333EA','#C026D3'];let h=0;for(let c of(str||''))h=c.charCodeAt(0)+h*31;return cols[Math.abs(h)%cols.length];};
+
+// ─── USERS ────────────────────────────────────────
+const USERS=[
+  {id:'u1',name:'Alex Morgan',email:'superadmin@itsm.com',pw:'Admin@123',role:'SUPER_ADMIN',dept:'IT',title:'CIO'},
+  {id:'u2',name:'Sarah Chen',email:'admin@itsm.com',pw:'Admin@123',role:'ADMIN',dept:'IT',title:'IT Manager'},
+  {id:'u3',name:'James Wilson',email:'employee@company.com',pw:'Employee@123',role:'EMPLOYEE',dept:'Finance',title:'Finance Analyst'},
+  {id:'u4',name:'Priya Sharma',email:'helpdesk@company.com',pw:'Helpdesk@123',role:'HELPDESK',dept:'IT',title:'Help Desk Analyst'},
+  {id:'u5',name:'David Lee',email:'agent@company.com',pw:'Agent@123',role:'AGENT',dept:'IT',title:'IT Support Specialist'},
+  {id:'u6',name:'Maria Garcia',email:'manager@company.com',pw:'Manager@123',role:'SERVICE_MANAGER',dept:'IT',title:'IT Service Manager'},
+  {id:'u7',name:'Robert Kim',email:'rkim@company.com',pw:'Pass@123',role:'EMPLOYEE',dept:'Finance',title:'Finance Manager'},
+  {id:'u8',name:'Emily Brown',email:'ebrown@company.com',pw:'Pass@123',role:'AGENT',dept:'IT',title:'Network Engineer'},
+  {id:'u11',name:'Mark Turner',email:'mturner@company.com',pw:'Pass@123',role:'AGENT',dept:'IT',title:'Systems Engineer'},
+];
+
+// ─── SEED PROBLEMS ────────────────────────────────
+const SEED_PROBLEMS=[
+  {id:'PRB-00001',title:'Email server recurring outages',desc:'Multiple incidents (INC-00001, INC-00023, INC-00031) reported email server going offline. Pattern analysis shows SSL certificate expiry and load balancer misconfiguration as contributing factors.',category:'Application',impact:'Critical',status:'Root Cause Identified',owner:'u8',team:'IT-Core',created:daysAgo(10),updated:hoursAgo(2),
+   linkedIncidents:['INC-00001','INC-00023','INC-00031'],
+   rootCause:'SSL certificate auto-renewal process failed due to Let\'s Encrypt rate limiting. Combined with load balancer session persistence misconfiguration, this caused cascading failures during high-load periods.',
+   workaround:'Manually restart Exchange transport service and reset SSL binding. Takes ~15 mins. Temporary fix only.',
+   knownError:true,kedbId:'KEDB-00001',
+   fixPlan:'1. Implement certificate monitoring with 60-day advance alert. 2. Reconfigure load balancer session affinity. 3. Setup automated failover to secondary MX.',
+   timeline:[{action:'Problem Opened',by:'u6',at:daysAgo(10),note:'Pattern detected from 3 related incidents'},{action:'Under Investigation',by:'u8',at:daysAgo(8),note:'Assigned to Emily Brown'},{action:'Root Cause Identified',by:'u8',at:daysAgo(3),note:'SSL + LB misconfiguration confirmed'},{action:'KEDB Entry Created',by:'u6',at:hoursAgo(2),note:'KEDB-00001 created with workaround'}]},
+  {id:'PRB-00002',title:'VPN intermittent disconnections',desc:'Remote workers experiencing VPN drops every 20-40 minutes. Affects ~30 users across branches. Multiple INC tickets raised.',category:'Network',impact:'High',status:'Under Investigation',owner:'u8',team:'IT-Network',created:daysAgo(5),updated:hoursAgo(6),
+   linkedIncidents:['INC-00002','INC-00017','INC-00022'],
+   rootCause:'',workaround:'Reconnect manually. Users can set session timeout to 60 mins in AnyConnect preferences.',knownError:false,kedbId:'',
+   fixPlan:'Investigating RADIUS server authentication timeout settings. Possible MTU mismatch.',
+   timeline:[{action:'Problem Opened',by:'u6',at:daysAgo(5),note:'Raised after 3rd VPN incident this week'},{action:'Assigned',by:'u6',at:daysAgo(5),note:'Assigned to Network team'}]},
+  {id:'PRB-00003',title:'Laptop overheating after Windows Update',desc:'Pattern of hardware overheating issues after the KB5034439 Windows Update. Affects Dell Latitude 5540 models specifically.',category:'Hardware',impact:'Medium',status:'Known Error',owner:'u5',team:'IT-Support',created:daysAgo(7),updated:daysAgo(1),
+   linkedIncidents:['INC-00004','INC-00028'],
+   rootCause:'KB5034439 update modifies power management settings and disables fan speed throttling on Dell Latitude 5540. Intel driver conflict confirmed.',
+   workaround:'Uninstall KB5034439 via Windows Update history. Set power plan to Balanced instead of High Performance.',
+   knownError:true,kedbId:'KEDB-00002',
+   fixPlan:'Waiting for Dell driver update (estimated 2 weeks). Will push via WSUS once available.',
+   timeline:[{action:'Problem Opened',by:'u4',at:daysAgo(7),note:'2nd overheating ticket with same model'},{action:'Root Cause Identified',by:'u5',at:daysAgo(4),note:'Dell confirmed driver conflict'},{action:'KEDB Created',by:'u5',at:daysAgo(1),note:'KEDB-00002 with workaround published'}]},
+  {id:'PRB-00004',title:'Slow network in conference rooms',desc:'Persistent slow Wi-Fi in all 4 conference rooms on Floor 2. Vendor investigation ongoing.',category:'Network',impact:'Medium',status:'Open',owner:'u11',team:'IT-Network',created:daysAgo(3),updated:hoursAgo(12),
+   linkedIncidents:['INC-00008','INC-00019'],
+   rootCause:'',workaround:'Use wired Ethernet in meeting rooms as temporary workaround. Ethernet ports available under each table.',knownError:false,kedbId:'',
+   fixPlan:'Access point replacement ordered. Vendor on-site visit scheduled for next week.',
+   timeline:[{action:'Problem Opened',by:'u11',at:daysAgo(3),note:'Raised after multiple Wi-Fi complaints'}]},
+  {id:'PRB-00005',title:'Database disk utilization pattern',desc:'PROD-DB-01 reaching 90%+ disk utilization on the 1st and 15th of each month coinciding with batch jobs.',category:'Database',impact:'Critical',status:'Fix In Progress',owner:'u11',team:'IT-Database',created:daysAgo(14),updated:daysAgo(2),
+   linkedIncidents:['INC-00005','INC-00012'],
+   rootCause:'Monthly and bi-monthly batch reporting jobs generate large temp files that aren\'t cleaned up automatically. Archive logs also not purged correctly.',
+   workaround:'Run manual disk cleanup script before batch jobs. Contact DB team if disk > 85%.',
+   knownError:true,kedbId:'KEDB-00003',
+   fixPlan:'1. Automated temp file cleanup job added to scheduler. 2. Archive log rotation configured. 3. Disk expansion request submitted (500GB SSD).',
+   timeline:[{action:'Problem Opened',by:'u6',at:daysAgo(14),note:'Critical disk alert pattern identified'},{action:'Root Cause Found',by:'u11',at:daysAgo(10),note:'Batch job temp files confirmed'},{action:'Fix In Progress',by:'u11',at:daysAgo(2),note:'Automated cleanup configured'}]},
+];
+
+// ─── SEED CHANGES ─────────────────────────────────
+const SEED_CHANGES=[
+  {id:'CHG-00001',type:'Normal',title:'Firewall rule update for new branch office',desc:'Add 12 inbound/outbound firewall rules for Branch C - Dallas office network integration. Includes VPN tunnel configuration.',category:'Network',risk:'Medium',impact:'Moderate',status:'CAB Approved',reqBy:'u8',owner:'u8',team:'IT-Network',created:daysAgo(8),updated:daysAgo(1),scheduledStart:daysFrom(2),scheduledEnd:daysFrom(2),
+   rollbackPlan:'Revert firewall rules to snapshot taken before change. ETA 30 mins. Backup config saved to network share.',
+   testPlan:'1. Test VPN tunnel connectivity. 2. Ping all branch IPs. 3. Verify application access from branch. 4. Run firewall policy audit.',
+   impactedSystems:['Firewall-01','Firewall-02','VPN-Gateway'],
+   justification:'Branch C office goes live in 3 days. Network integration is a critical dependency for 45 new staff.',
+   cabVotes:[{voter:'u1',vote:'Approve',comment:'Low risk, well-tested. Go ahead.',at:daysAgo(2)},{voter:'u2',vote:'Approve',comment:'Approved. Ensure rollback is tested first.',at:daysAgo(2)},{voter:'u6',vote:'Approve',comment:'Approved with monitoring requirement.',at:daysAgo(1)}],
+   linkedProblems:[],
+   timeline:[{action:'Draft Created',by:'u8',at:daysAgo(8),note:''},{action:'Submitted for CAB',by:'u8',at:daysAgo(6),note:'CAB review requested'},{action:'CAB Approved',by:'System',at:daysAgo(1),note:'3/3 CAB votes: Approved'}]},
+  {id:'CHG-00002',type:'Emergency',title:'SSL certificate emergency renewal - Email server',desc:'Emergency renewal of expired SSL certificate on Exchange Server causing email outage. Must be done immediately to restore service.',category:'Application',risk:'Low',impact:'Critical',status:'Completed',reqBy:'u5',owner:'u5',team:'IT-Core',created:hoursAgo(48),updated:hoursAgo(40),scheduledStart:hoursAgo(47),scheduledEnd:hoursAgo(45),
+   rollbackPlan:'N/A - Emergency change. Previous cert backed up. Can restore in 10 mins if needed.',
+   testPlan:'Send/receive test email from multiple clients. Verify SSL chain with ssllabs.com.',
+   impactedSystems:['Exchange-01','Outlook Web Access'],
+   justification:'Email server down for 200+ users. Critical business impact. Every hour costs ~$50K in productivity.',
+   cabVotes:[],
+   linkedProblems:['PRB-00001'],
+   timeline:[{action:'Emergency Change Created',by:'u5',at:hoursAgo(48),note:'P1 INC-00001 triggered emergency change'},{action:'Approved by Service Manager',by:'u6',at:hoursAgo(47),note:'Emergency verbal approval - post-review required'},{action:'In Progress',by:'u5',at:hoursAgo(47),note:'SSL certificate renewal started'},{action:'Completed',by:'u5',at:hoursAgo(45),note:'SSL renewed. Email service restored. Post-review CAB scheduled.'}]},
+  {id:'CHG-00003',type:'Standard',title:'Monthly Windows patching - Non-prod servers',desc:'Apply accumulated Windows security patches to 8 non-production servers. Standard monthly maintenance window.',category:'Server/VM',risk:'Low',impact:'Minor',status:'Scheduled',reqBy:'u11',owner:'u11',team:'IT-Infrastructure',created:daysAgo(4),updated:daysAgo(2),scheduledStart:daysFrom(5),scheduledEnd:daysFrom(5),
+   rollbackPlan:'Snapshot taken before patching. Rollback via VMware snapshot in 15 mins.',
+   testPlan:'Verify services start post-reboot. Run smoke tests on each server. Check event logs.',
+   impactedSystems:['DEV-SRV-01','DEV-SRV-02','TEST-SRV-01','TEST-SRV-02','TEST-SRV-03','UAT-SRV-01','UAT-SRV-02','QA-SRV-01'],
+   justification:'Monthly patch cycle. Keeps non-prod in sync with security standards.',
+   cabVotes:[],
+   linkedProblems:[],
+   timeline:[{action:'Created',by:'u11',at:daysAgo(4),note:'Standard change - pre-approved template'},{action:'Scheduled',by:'System',at:daysAgo(4),note:'Auto-scheduled per standard change policy'}]},
+  {id:'CHG-00004',type:'Normal',title:'Database server disk expansion - PROD-DB-01',desc:'Expand PROD-DB-01 primary disk from 2TB to 2.5TB to address recurring capacity issues. Requires brief downtime.',category:'Database',risk:'High',impact:'Major',status:'CAB Review',reqBy:'u11',owner:'u11',team:'IT-Database',created:daysAgo(3),updated:daysAgo(1),scheduledStart:daysFrom(7),scheduledEnd:daysFrom(7),
+   rollbackPlan:'Revert to original 2TB disk (snapshot retained for 30 days). Database team on standby. ETA 45 mins for full rollback.',
+   testPlan:'1. Verify disk extension in OS. 2. Run DB integrity check. 3. Execute sample queries. 4. Monitor I/O for 30 mins post-change.',
+   impactedSystems:['PROD-DB-01','All production applications'],
+   justification:'Disk at 95% capacity (INC-00005). Risk of outage if not addressed. PRB-00005 fix requires additional space.',
+   cabVotes:[{voter:'u6',vote:'Approve',comment:'Critical need. Ensure rollback is fully tested.',at:daysAgo(1)}],
+   linkedProblems:['PRB-00005'],
+   timeline:[{action:'Draft Created',by:'u11',at:daysAgo(3),note:''},{action:'Submitted for CAB',by:'u11',at:daysAgo(2),note:''},{action:'CAB Vote: Approve',by:'u6',at:daysAgo(1),note:'1/3 votes in. Waiting for remaining.'}]},
+  {id:'CHG-00005',type:'Normal',title:'Active Directory schema upgrade',desc:'Upgrade AD schema from Windows Server 2016 level to 2022 level. Required for new security policies and hybrid Azure AD integration.',category:'Security',risk:'High',impact:'Major',status:'Draft',reqBy:'u2',owner:'u2',team:'IT-Security',created:daysAgo(1),updated:daysAgo(1),scheduledStart:daysFrom(14),scheduledEnd:daysFrom(14),
+   rollbackPlan:'AD schema changes are irreversible. Full AD forest backup taken 24h before. Restore from backup takes 4-6 hours.',
+   testPlan:'1. Test in lab environment first. 2. Schema prep /forestprep and /domainprep dry run. 3. Verify all GPOs post-upgrade. 4. Test authentication for all app types.',
+   impactedSystems:['DC-01','DC-02','All domain-joined machines','All AD-integrated applications'],
+   justification:'Required for Azure AD Connect upgrade and MFA rollout (security initiative Q2 2025).',
+   cabVotes:[],
+   linkedProblems:[],
+   timeline:[{action:'Draft Created',by:'u2',at:daysAgo(1),note:'Change planning started'}]},
+  {id:'CHG-00006',type:'Standard',title:'SSL certificate renewal - Web portal',desc:'Routine renewal of wildcard SSL certificate for *.company.com expiring in 15 days.',category:'Security',risk:'Low',impact:'Minor',status:'Completed',reqBy:'u5',owner:'u5',team:'IT-Core',created:daysAgo(20),updated:daysAgo(14),scheduledStart:daysAgo(15),scheduledEnd:daysAgo(15),
+   rollbackPlan:'Previous cert backed up. Can restore in 5 mins.',
+   testPlan:'Verify SSL grade on ssllabs.com. Test all subdomains.',
+   impactedSystems:['Web-Proxy-01','Reverse Proxy'],
+   justification:'Routine maintenance. Certificate was expiring.',
+   cabVotes:[],linkedProblems:[],
+   timeline:[{action:'Created',by:'u5',at:daysAgo(20),note:''},{action:'Completed',by:'u5',at:daysAgo(14),note:'Certificate renewed successfully'}]},
+];
+
+// ─── UI ATOMS ─────────────────────────────────────
+const Avatar=({name='?',size=32,sx={}})=><div style={{width:size,height:size,borderRadius:'50%',background:avatarColor(name),display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:size*.34,fontWeight:700,flexShrink:0,...sx}}>{initials(name)}</div>;
+
+const RoleBadge=({role})=>{const m=ROLE_META[role];if(!m)return null;return <span style={{fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:20,border:`1px solid ${m.border}`,color:m.color,background:m.bg,whiteSpace:'nowrap',letterSpacing:'0.05em',textTransform:'uppercase'}}>{m.label}</span>;};
+
+const Tag=({label,color=C.primary,bg=C.primaryLt})=><span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,color,background:bg,whiteSpace:'nowrap'}}>{label}</span>;
+
+const ImpactBadge=({impact})=>{
+  const m={Low:{c:C.success,bg:C.successLt},Medium:{c:C.warning,bg:C.warningLt},High:{c:C.orange,bg:C.orangeLt},Critical:{c:C.danger,bg:C.dangerLt},Minimal:{c:C.success,bg:C.successLt},Minor:{c:C.teal,bg:C.tealLt},Moderate:{c:C.warning,bg:C.warningLt},Major:{c:C.orange,bg:C.orangeLt}};
+  const s=m[impact]||{c:C.t2,bg:'#F1F5F9'};
+  return <span style={{fontSize:9,fontWeight:800,padding:'2px 7px',borderRadius:20,color:s.c,background:s.bg}}>{impact}</span>;
+};
+
+const StatusBadge=({status,module='prb'})=>{
+  const prb={'Open':{c:'#6366F1',bg:'#EEF2FF'},'Under Investigation':{c:C.warning,bg:C.warningLt},'Root Cause Identified':{c:C.orange,bg:C.orangeLt},'Known Error':{c:C.purple,bg:C.purpleLt},'Fix In Progress':{c:C.primary,bg:C.primaryLt},'Resolved':{c:C.success,bg:C.successLt},'Closed':{c:C.t3,bg:'#F1F5F9'}};
+  const chg={'Draft':{c:C.t3,bg:'#F8FAFC'},'Submitted':{c:'#6366F1',bg:'#EEF2FF'},'CAB Review':{c:C.warning,bg:C.warningLt},'CAB Approved':{c:C.success,bg:C.successLt},'Scheduled':{c:C.cyan,bg:C.cyanLt},'In Progress':{c:C.primary,bg:C.primaryLt},'Completed':{c:'#374151',bg:'#F9FAFB'},'Failed':{c:C.danger,bg:C.dangerLt},'Rolled Back':{c:C.orange,bg:C.orangeLt},'Cancelled':{c:C.t3,bg:'#F1F5F9'}};
+  const map=module==='chg'?chg:prb;
+  const s=map[status]||{c:C.t2,bg:'#F1F5F9'};
+  return <span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,color:s.c,background:s.bg,whiteSpace:'nowrap'}}><span style={{width:5,height:5,borderRadius:'50%',background:s.c}}/>{status}</span>;
+};
+
+const TypeBadge=({type})=>{const t=CHG_TYPES[type]||CHG_TYPES.Normal;return <span style={{fontSize:9,fontWeight:800,padding:'2px 8px',borderRadius:20,border:`1px solid ${t.border}`,color:t.color,background:t.bg,whiteSpace:'nowrap'}}>{t.icon} {t.label}</span>;};
+
+const Btn=({children,variant='primary',size='md',onClick,disabled,sx={},type='button',icon})=>{
+  const[h,sH]=useState(false);
+  const V={primary:{bg:C.primary,bgh:C.primaryH,text:'#fff',bdr:C.primary},danger:{bg:C.danger,bgh:'#B91C1C',text:'#fff',bdr:C.danger},ghost:{bg:'transparent',bgh:C.primaryLt,text:C.primary,bdr:C.border},success:{bg:C.success,bgh:'#047857',text:'#fff',bdr:C.success},warning:{bg:C.warning,bgh:'#B45309',text:'#fff',bdr:C.warning},outline:{bg:'transparent',bgh:'#F8FAFC',text:C.t2,bdr:C.border},purple:{bg:C.purple,bgh:'#6D28D9',text:'#fff',bdr:C.purple},teal:{bg:C.teal,bgh:'#0F766E',text:'#fff',bdr:C.teal}};
+  const v=V[variant]||V.primary;
+  const sz=size==='sm'?{padding:'4px 10px',fontSize:11}:size==='xs'?{padding:'3px 7px',fontSize:10}:size==='lg'?{padding:'10px 22px',fontSize:14}:{padding:'7px 13px',fontSize:12};
+  return <button type={type} disabled={disabled} onMouseEnter={()=>sH(true)} onMouseLeave={()=>sH(false)} onClick={onClick} style={{background:h&&!disabled?v.bgh:v.bg,color:v.text,border:`1px solid ${v.bdr}`,borderRadius:6,cursor:disabled?'not-allowed':'pointer',opacity:disabled?.6:1,fontWeight:600,display:'inline-flex',alignItems:'center',gap:5,transition:'all .15s',...sz,...sx}}>{icon&&<span style={{fontSize:12}}>{icon}</span>}{children}</button>;
+};
+const Input=({label,value,onChange,type='text',placeholder,required,error,disabled,sx={}})=>(
+  <div style={{display:'flex',flexDirection:'column',gap:3,...sx}}>
+    {label&&<label style={{fontSize:10,fontWeight:700,color:C.t2,letterSpacing:'0.04em',textTransform:'uppercase'}}>{label}{required&&<span style={{color:C.danger}}> *</span>}</label>}
+    <input type={type} value={value} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} disabled={disabled} style={{padding:'7px 10px',border:`1px solid ${error?C.danger:C.border}`,borderRadius:6,fontSize:12,color:C.t1,background:disabled?'#F8FAFC':'#fff',outline:'none',width:'100%'}} onFocus={e=>{if(!error)e.target.style.borderColor=C.primary;}} onBlur={e=>e.target.style.borderColor=error?C.danger:C.border;}/>
+    {error&&<span style={{fontSize:10,color:C.danger}}>{error}</span>}
+  </div>
+);
+const Sel=({label,value,onChange,opts,required,disabled,sx={}})=>(
+  <div style={{display:'flex',flexDirection:'column',gap:3,...sx}}>
+    {label&&<label style={{fontSize:10,fontWeight:700,color:C.t2,letterSpacing:'0.04em',textTransform:'uppercase'}}>{label}{required&&<span style={{color:C.danger}}> *</span>}</label>}
+    <select value={value} onChange={e=>onChange?.(e.target.value)} disabled={disabled} style={{padding:'7px 10px',border:`1px solid ${C.border}`,borderRadius:6,fontSize:12,color:C.t1,background:disabled?'#F8FAFC':'#fff',outline:'none',cursor:'pointer',width:'100%',appearance:'none',backgroundImage:"url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394A3B8' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E\")",backgroundRepeat:'no-repeat',backgroundPosition:'right 10px center',paddingRight:26}}>
+      {opts.map(o=><option key={o.v??o} value={o.v??o}>{o.l??o}</option>)}
+    </select>
+  </div>
+);
+const Textarea=({label,value,onChange,rows=3,placeholder,required,sx={}})=>(
+  <div style={{display:'flex',flexDirection:'column',gap:3,...sx}}>
+    {label&&<label style={{fontSize:10,fontWeight:700,color:C.t2,letterSpacing:'0.04em',textTransform:'uppercase'}}>{label}{required&&<span style={{color:C.danger}}> *</span>}</label>}
+    <textarea value={value} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder} style={{padding:'7px 10px',border:`1px solid ${C.border}`,borderRadius:6,fontSize:12,color:C.t1,resize:'vertical',outline:'none',width:'100%'}} onFocus={e=>e.target.style.borderColor=C.primary} onBlur={e=>e.target.style.borderColor=C.border}/>
+  </div>
+);
+const Modal=({open,title,onClose,children,width=600})=>{
+  if(!open)return null;
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:'#fff',borderRadius:10,boxShadow:'0 25px 60px rgba(0,0,0,0.25)',width:'100%',maxWidth:width,maxHeight:'92vh',display:'flex',flexDirection:'column',overflow:'hidden',animation:'slideUp .2s ease'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 18px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+        <h3 style={{margin:0,fontSize:14,fontWeight:800,color:C.t1}}>{title}</h3>
+        <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:C.t3,lineHeight:1,padding:'2px 6px'}}>×</button>
+      </div>
+      <div style={{padding:18,overflowY:'auto',flex:1}}>{children}</div>
+    </div>
+  </div>;
+};
+const Toast=({toasts,rem})=>(
+  <div style={{position:'fixed',bottom:18,right:18,zIndex:9999,display:'flex',flexDirection:'column',gap:7}}>
+    {toasts.map(t=>{const g=t.type==='success'?{bg:'#ECFDF5',bdr:'#A7F3D0',left:C.success,ic:'✓'}:t.type==='error'?{bg:'#FEF2F2',bdr:'#FECACA',left:C.danger,ic:'✗'}:t.type==='warning'?{bg:'#FFFBEB',bdr:'#FDE68A',left:C.warning,ic:'⚠'}:{bg:'#EFF6FF',bdr:'#BFDBFE',left:C.primary,ic:'ℹ'};
+    return <div key={t.id} onClick={()=>rem(t.id)} style={{background:g.bg,border:`1px solid ${g.bdr}`,borderLeft:`3px solid ${g.left}`,color:g.left,padding:'9px 13px',borderRadius:6,fontSize:12,fontWeight:600,boxShadow:'0 4px 14px rgba(0,0,0,0.1)',display:'flex',alignItems:'center',gap:9,minWidth:260,maxWidth:340,cursor:'pointer',animation:'slideUp .2s ease'}}>
+      <span>{g.ic}</span><span style={{flex:1}}>{t.msg}</span><span style={{opacity:.4}}>×</span>
+    </div>;})}
+  </div>
+);
+
+// ─── SIDEBAR + HEADER ─────────────────────────────
+const NAV=[
+  {id:'dashboard',label:'Dashboard',icon:'⊞',g:'Main'},
+  {id:'incidents',label:'Incident Mgmt',icon:'🚨',g:'Tickets'},
+  {id:'service_req',label:'Service Requests',icon:'📋',g:'Tickets'},
+  {id:'imac',label:'IMAC',icon:'🔄',g:'Tickets'},
+  {id:'problems',label:'Problem Mgmt',icon:'🔍',g:'Tickets'},
+  {id:'changes',label:'Change Mgmt',icon:'🔧',g:'Tickets'},
+  {id:'cmdb',label:'Assets & CMDB',icon:'🖥️',g:'Resources'},
+  {id:'knowledge',label:'Knowledge Base',icon:'📚',g:'Resources'},
+  {id:'sla',label:'SLA & Escalation',icon:'⏱️',g:'Management'},
+  {id:'employees',label:'Employee Mgmt',icon:'👥',g:'Management'},
+  {id:'users',label:'User Mgmt',icon:'🔐',g:'Management'},
+  {id:'reports',label:'Reports',icon:'📊',g:'Management'},
+];
+const ROLE_NAV={
+  SUPER_ADMIN:['dashboard','incidents','service_req','imac','problems','changes','cmdb','knowledge','sla','employees','users','reports'],
+  ADMIN:['dashboard','incidents','service_req','imac','problems','changes','cmdb','knowledge','sla','employees','users','reports'],
+  EMPLOYEE:['dashboard','service_req','incidents','knowledge'],
+  HELPDESK:['dashboard','incidents','service_req','imac','problems','knowledge'],
+  AGENT:['dashboard','incidents','service_req','imac','problems','changes','knowledge'],
+  SERVICE_MANAGER:['dashboard','incidents','service_req','imac','problems','changes','cmdb','knowledge','sla','employees','reports'],
+};
+const Sidebar=({user,active,onNav,col,setCol})=>{
+  const vis=NAV.filter(i=>(ROLE_NAV[user.role]||[]).includes(i.id));
+  const groups=[...new Set(NAV.map(n=>n.g))];
+  return <div style={{width:col?56:228,background:C.sb,display:'flex',flexDirection:'column',height:'100vh',position:'fixed',left:0,top:0,zIndex:100,transition:'width .2s ease',borderRight:`1px solid ${C.sbBorder}`,overflow:'hidden'}}>
+    <div style={{padding:col?'13px 11px':'13px',borderBottom:`1px solid ${C.sbBorder}`,display:'flex',alignItems:'center',gap:9,flexShrink:0}}>
+      <div style={{width:28,height:28,borderRadius:6,background:C.primary,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>⚡</div>
+      {!col&&<div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:800,color:'#fff'}}>ITSM<span style={{color:'#60A5FA'}}>Pro</span></div><div style={{fontSize:8,color:'#334155',letterSpacing:'0.1em',textTransform:'uppercase'}}>Service Mgmt</div></div>}
+      <button onClick={()=>setCol(!col)} style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',color:'#334155',fontSize:15,flexShrink:0}}>{col?'›':'‹'}</button>
+    </div>
+    <div style={{flex:1,overflowY:'auto',overflowX:'hidden',padding:'5px 0',scrollbarWidth:'none'}}>
+      {groups.map(g=>{const items=vis.filter(i=>i.g===g);if(!items.length)return null;
+        return <div key={g}>{!col&&<div style={{padding:'5px 13px 2px',fontSize:8,fontWeight:800,color:'#1E3A5F',letterSpacing:'0.12em',textTransform:'uppercase'}}>{g}</div>}
+          {items.map(item=>{const isA=active===item.id;
+            return <button key={item.id} onClick={()=>onNav(item.id)} title={col?item.label:''} style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:col?'8px 14px':'7px 13px',background:isA?C.sbActive:'transparent',border:'none',cursor:'pointer',transition:'background .15s',borderLeft:isA?`2px solid ${C.primary}`:'2px solid transparent',justifyContent:col?'center':'flex-start'}} onMouseEnter={e=>{if(!isA)e.currentTarget.style.background=C.sbHover;}} onMouseLeave={e=>{if(!isA)e.currentTarget.style.background='transparent';}}>
+              <span style={{fontSize:14,flexShrink:0}}>{item.icon}</span>
+              {!col&&<span style={{fontSize:11,color:isA?C.sbActiveTxt:C.sbText,fontWeight:isA?700:400,whiteSpace:'nowrap'}}>{item.label}</span>}
+            </button>;})}
+        </div>;})}
+    </div>
+    {!col&&<div style={{padding:'9px 13px',borderTop:`1px solid ${C.sbBorder}`,display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+      <Avatar name={user.name} size={25}/>
+      <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,color:'#CBD5E1',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user.name}</div><div style={{fontSize:8,color:'#334155'}}>{ROLE_META[user.role]?.label}</div></div>
+      <div style={{width:5,height:5,borderRadius:'50%',background:C.success}}/>
+    </div>}
+  </div>;
+};
+const Header=({user,active,changes,onLogout})=>{
+  const[sm,setSM]=useState(false);
+  const mod=NAV.find(i=>i.id===active);
+  const pendCAB=changes.filter(c=>c.status==='CAB Review');
+  return <div style={{background:'#fff',borderBottom:`1px solid ${C.border}`,padding:'0 18px',display:'flex',alignItems:'center',gap:12,height:50,position:'sticky',top:0,zIndex:50,flexShrink:0}}>
+    <div style={{flex:1,display:'flex',alignItems:'center',gap:5}}>
+      <span style={{fontSize:10,color:C.t3}}>ITSM Pro</span><span style={{fontSize:10,color:C.t3}}>›</span>
+      <span style={{fontSize:12,fontWeight:800,color:C.t1}}>{mod?.label||'Dashboard'}</span>
+      <span style={{fontSize:9,color:'#fff',background:C.purple,padding:'1px 6px',borderRadius:10,marginLeft:4,fontWeight:700}}>PART 4 LIVE</span>
+    </div>
+    {CAB_ROLES.includes(user.role)&&pendCAB.length>0&&<div style={{display:'flex',alignItems:'center',gap:5,background:C.warningLt,border:`1px solid #FDE68A`,borderRadius:6,padding:'4px 10px',fontSize:11,fontWeight:700,color:C.warning}}>
+      🗳 {pendCAB.length} CAB Pending Vote{pendCAB.length>1?'s':''}
+    </div>}
+    <div style={{position:'relative'}}>
+      <button onClick={e=>{e.stopPropagation();setSM(!sm);}} style={{background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:7,padding:'3px 6px',borderRadius:6}}>
+        <Avatar name={user.name} size={26}/><div style={{textAlign:'left'}}><div style={{fontSize:11,fontWeight:700,color:C.t1}}>{user.name}</div><div style={{fontSize:9,color:C.t3}}>{ROLE_META[user.role]?.label}</div></div><span style={{fontSize:8,color:C.t3}}>▾</span>
+      </button>
+      {sm&&<div style={{position:'absolute',right:0,top:38,width:190,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:200,overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:'10px 13px',borderBottom:`1px solid ${C.border}`}}><div style={{fontSize:11,fontWeight:700,color:C.t1}}>{user.name}</div><div style={{marginTop:4}}><RoleBadge role={user.role}/></div></div>
+        <div style={{borderTop:`1px solid ${C.border}`}}><button onClick={()=>{setSM(false);onLogout();}} style={{width:'100%',padding:'8px 13px',background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.danger,textAlign:'left'}} onMouseEnter={e=>e.currentTarget.style.background='#FEF2F2'} onMouseLeave={e=>e.currentTarget.style.background='none'}>🚪 Sign Out</button></div>
+      </div>}
+    </div>
+  </div>;
+};
+
+// ══════════════════════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════════════════════
+const Dashboard=({user,problems,changes})=>{
+  const openProb=problems.filter(p=>!['Resolved','Closed'].includes(p.status));
+  const kedb=problems.filter(p=>p.knownError);
+  const cabPending=changes.filter(c=>c.status==='CAB Review');
+  const scheduled=changes.filter(c=>c.status==='Scheduled');
+  const inProg=changes.filter(c=>c.status==='In Progress');
+  const myCABVotes=cabPending.filter(c=>CAB_ROLES.includes(user.role)&&!(c.cabVotes||[]).some(v=>v.voter===user.id));
+
+  return <div style={{padding:'18px 20px',maxWidth:1200}}>
+    <div style={{marginBottom:14}}><h1 style={{fontSize:18,fontWeight:800,color:C.t1,margin:'0 0 2px'}}>Problem & Change Overview</h1><p style={{fontSize:11,color:C.t2,margin:0}}>{today()} · {ROLE_META[user.role]?.label}</p></div>
+
+    {myCABVotes.length>0&&<div style={{background:C.warningLt,border:`1px solid #FDE68A`,borderRadius:8,padding:'10px 14px',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
+      <span style={{fontSize:18}}>🗳</span>
+      <div style={{flex:1}}><div style={{fontSize:12,fontWeight:800,color:C.warning}}>You have {myCABVotes.length} CAB vote{myCABVotes.length>1?'s':''} pending</div>
+        <div style={{fontSize:11,color:C.t2}}>{myCABVotes.map(c=>c.id).join(', ')}</div>
+      </div>
+    </div>}
+
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10,marginBottom:14}}>
+      {[
+        {l:'Open Problems',v:openProb.length,ic:'🔍',c:C.orange},
+        {l:'Known Errors (KEDB)',v:kedb.length,ic:'📖',c:C.purple},
+        {l:'CAB Pending',v:cabPending.length,ic:'🗳',c:C.warning},
+        {l:'Scheduled Changes',v:scheduled.length,ic:'📅',c:C.cyan},
+        {l:'Changes In Progress',v:inProg.length,ic:'🔧',c:C.primary},
+        {l:'Completed (30d)',v:changes.filter(c=>c.status==='Completed').length,ic:'✅',c:C.success},
+      ].map((s,i)=><div key={i} style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:13}}>
+        <div style={{width:32,height:32,borderRadius:7,background:`${s.c}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,marginBottom:9}}>{s.ic}</div>
+        <div style={{fontSize:22,fontWeight:800,color:C.t1,lineHeight:1}}>{s.v}</div>
+        <div style={{fontSize:11,color:C.t2,marginTop:2}}>{s.l}</div>
+      </div>)}
+    </div>
+
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+      <div style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:14}}>
+        <div style={{fontSize:12,fontWeight:800,color:C.t1,marginBottom:10}}>Open Problems by Impact</div>
+        {openProb.length===0?<p style={{fontSize:11,color:C.t3}}>No open problems</p>:openProb.map(p=><div key={p.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,padding:'7px 10px',borderRadius:6,background:'#F8FAFC',border:`1px solid ${C.border}`}}>
+          <ImpactBadge impact={p.impact}/>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.title}</div></div>
+          <StatusBadge status={p.status}/>
+        </div>)}
+      </div>
+      <div style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:14}}>
+        <div style={{fontSize:12,fontWeight:800,color:C.t1,marginBottom:10}}>Upcoming Changes</div>
+        {scheduled.length===0&&inProg.length===0?<p style={{fontSize:11,color:C.t3}}>No upcoming changes</p>:[...inProg,...scheduled].slice(0,4).map(c=><div key={c.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,padding:'7px 10px',borderRadius:6,background:'#F8FAFC',border:`1px solid ${C.border}`}}>
+          <TypeBadge type={c.type}/>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.title}</div><div style={{fontSize:9,color:C.t3}}>{c.scheduledStart}</div></div>
+          <StatusBadge status={c.status} module="chg"/>
+        </div>)}
+      </div>
+    </div>
+  </div>;
+};
+
+// ══════════════════════════════════════════════════════════════
+// PROBLEM MANAGEMENT MODULE
+// ══════════════════════════════════════════════════════════════
+const ProblemModule=({me,problems,setProblems,addToast})=>{
+  const[tab,setTab]=useState('list');
+  const[selected,setSelected]=useState(null);
+  const[showNew,setSN]=useState(false);
+  const[search,setSearch]=useState('');
+  const[fStatus,setFS]=useState('');
+  const[fImpact,setFI]=useState('');
+  const[showRCA,setSRCA]=useState(false);
+  const[rcaData,setRCAData]=useState({rootCause:'',workaround:'',fixPlan:'',knownError:false});
+  const[noteText,setNT]=useState('');
+
+  const filtered=useMemo(()=>{
+    const q=search.toLowerCase();
+    return problems.filter(p=>(!q||p.id.toLowerCase().includes(q)||p.title.toLowerCase().includes(q))&&(!fStatus||p.status===fStatus)&&(!fImpact||p.impact===fImpact)).sort((a,b)=>b.id.localeCompare(a.id));
+  },[problems,search,fStatus,fImpact]);
+
+  const kedbItems=problems.filter(p=>p.knownError);
+
+  const updateProb=(p)=>{setProblems(prev=>prev.map(x=>x.id===p.id?p:x));setSelected(p);addToast('success',`${p.id} updated`);};
+
+  const canEdit=['AGENT','HELPDESK','SERVICE_MANAGER','ADMIN','SUPER_ADMIN'].includes(me.role);
+
+  const NewProbForm=()=>{
+    const[f,setF]=useState({title:'',desc:'',category:PROB_CATS[0],impact:'High',owner:me.id});
+    const[errs,setErrs]=useState({});
+    const ff=k=>v=>setF(p=>({...p,[k]:v}));
+    const submit=()=>{
+      const e={};if(!f.title.trim())e.title='Required';if(!f.desc.trim())e.desc='Required';
+      if(Object.keys(e).length){setErrs(e);return;}
+      const np={id:genId('PRB'),title:f.title,desc:f.desc,category:f.category,impact:f.impact,status:'Open',owner:f.owner,team:'IT',created:now(),updated:now(),linkedIncidents:[],rootCause:'',workaround:'',knownError:false,kedbId:'',fixPlan:'',timeline:[{action:'Problem Opened',by:me.id,at:now(),note:'New problem record created'}]};
+      setProblems(p=>[np,...p]);addToast('success',`${np.id} created`);setSN(false);
+    };
+    return <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+      <Input label="Problem Title" value={f.title} onChange={ff('title')} required error={errs.title} sx={{gridColumn:'1/-1'}} placeholder="Brief description of the problem pattern…"/>
+      <Textarea label="Description" value={f.desc} onChange={ff('desc')} required rows={3} sx={{gridColumn:'1/-1'}} placeholder="Describe the recurring issue, affected users, incidents linked…"/>
+      <Sel label="Category" value={f.category} onChange={ff('category')} opts={PROB_CATS.map(c=>({v:c,l:c}))} required/>
+      <Sel label="Impact" value={f.impact} onChange={ff('impact')} opts={PROB_IMPACT.map(x=>({v:x,l:x}))} required/>
+      <Sel label="Assign Owner" value={f.owner} onChange={ff('owner')} opts={USERS.filter(u=>['AGENT','HELPDESK','SERVICE_MANAGER','ADMIN','SUPER_ADMIN'].includes(u.role)).map(u=>({v:u.id,l:u.name}))} sx={{gridColumn:'1/-1'}}/>
+      <div style={{gridColumn:'1/-1',display:'flex',justifyContent:'flex-end',gap:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
+        <Btn variant="outline" onClick={()=>setSN(false)}>Cancel</Btn>
+        <Btn onClick={submit}>🔍 Create Problem Record</Btn>
+      </div>
+    </div>;
+  };
+
+  const ProbDetail=({p})=>{
+    const[showRCAForm,setSRF]=useState(false);
+    const[rcaF,setRCAF]=useState({rootCause:p.rootCause||'',workaround:p.workaround||'',fixPlan:p.fixPlan||'',knownError:p.knownError||false});
+    const owner=USERS.find(u=>u.id===p.owner);
+
+    const saveRCA=()=>{
+      const kedbId=rcaF.knownError&&!p.kedbId?`KEDB-${String(problems.length+1).padStart(5,'0')}`:p.kedbId;
+      const newStatus=rcaF.knownError?'Known Error':rcaF.rootCause?'Root Cause Identified':p.status;
+      const upd={...p,...rcaF,kedbId,status:newStatus,updated:now(),timeline:[...p.timeline,{action:`RCA Updated${rcaF.knownError?' — KEDB Entry Created':''}`,by:me.id,at:now(),note:rcaF.knownError?`KEDB ID: ${kedbId}`:'Root cause documented'}]};
+      updateProb(upd);setSRF(false);
+    };
+
+    const setStatus=(ns)=>{
+      const upd={...p,status:ns,updated:now(),timeline:[...p.timeline,{action:`Status: ${ns}`,by:me.id,at:now(),note:`Changed by ${USERS.find(u=>u.id===me.id)?.name}`}]};
+      if(ns==='Resolved')upd.resolved=now();
+      updateProb(upd);
+    };
+
+    const addNote=()=>{
+      if(!noteText.trim())return;
+      const upd={...p,updated:now(),timeline:[...p.timeline,{action:'Note Added',by:me.id,at:now(),note:noteText}]};
+      updateProb(upd);setNT('');
+    };
+
+    const impactColors={Critical:C.danger,High:C.orange,Medium:C.warning,Low:C.success};
+
+    return <div style={{padding:16,overflowY:'auto',flex:1}}>
+      <div style={{display:'flex',gap:7,flexWrap:'wrap',marginBottom:10}}>
+        <ImpactBadge impact={p.impact}/><StatusBadge status={p.status}/>
+        {p.knownError&&<Tag label={`📖 ${p.kedbId}`} color={C.purple} bg={C.purpleLt}/>}
+        <Tag label={p.category} color={C.t2} bg='#F1F5F9'/>
+      </div>
+      <h3 style={{fontSize:15,fontWeight:800,color:C.t1,margin:'0 0 8px',lineHeight:1.3}}>{p.title}</h3>
+
+      {canEdit&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>
+        {!['Resolved','Closed'].includes(p.status)&&<Btn size="sm" variant="outline" icon="🔬" onClick={()=>setSRF(!showRCAForm)}>RCA / KEDB</Btn>}
+        {['Open','Under Investigation'].includes(p.status)&&<Btn size="sm" variant="outline" onClick={()=>setStatus('Under Investigation')}>→ Investigating</Btn>}
+        {['Root Cause Identified','Known Error','Fix In Progress'].includes(p.status)&&<Btn size="sm" variant="success" onClick={()=>setStatus('Resolved')}>✓ Mark Resolved</Btn>}
+        {p.status==='Resolved'&&<Btn size="sm" variant="outline" onClick={()=>setStatus('Closed')}>Close Problem</Btn>}
+      </div>}
+
+      {showRCAForm&&<div style={{background:'#F8FAFC',border:`1px solid ${C.border}`,borderRadius:8,padding:12,marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:800,color:C.t1,marginBottom:10}}>🔬 Root Cause Analysis</div>
+        <div style={{display:'flex',flexDirection:'column',gap:9}}>
+          <Textarea label="Root Cause" value={rcaF.rootCause} onChange={v=>setRCAF(f=>({...f,rootCause:v}))} rows={2} placeholder="What is the underlying root cause?…"/>
+          <Textarea label="Workaround" value={rcaF.workaround} onChange={v=>setRCAF(f=>({...f,workaround:v}))} rows={2} placeholder="Steps users / helpdesk can take to work around the issue…"/>
+          <Textarea label="Fix Plan" value={rcaF.fixPlan} onChange={v=>setRCAF(f=>({...f,fixPlan:v}))} rows={2} placeholder="Permanent fix plan and timeline…"/>
+          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.t1,cursor:'pointer'}}>
+            <input type="checkbox" checked={rcaF.knownError} onChange={e=>setRCAF(f=>({...f,knownError:e.target.checked}))}/>
+            <span>Publish to Known Error Database (KEDB){!p.kedbId&&rcaF.knownError&&<span style={{color:C.purple,fontWeight:700}}> — New KEDB ID will be assigned</span>}</span>
+          </label>
+        </div>
+        <div style={{display:'flex',gap:7,marginTop:10}}><Btn size="sm" onClick={saveRCA}>Save RCA</Btn><Btn size="sm" variant="outline" onClick={()=>setSRF(false)}>Cancel</Btn></div>
+      </div>}
+
+      {/* RCA display */}
+      {(p.rootCause||p.workaround||p.fixPlan)&&<div style={{marginBottom:12}}>
+        {[['🎯 Root Cause',p.rootCause,C.danger],[' Workaround',p.workaround,C.orange],['🔧 Fix Plan',p.fixPlan,C.primary]].filter(([,v])=>v).map(([k,v,col])=>(
+          <div key={k} style={{marginBottom:8,background:'#F8FAFC',border:`1px solid ${C.border}`,borderRadius:6,padding:'9px 11px',borderLeft:`3px solid ${col}`}}>
+            <div style={{fontSize:9,color:col,fontWeight:800,textTransform:'uppercase',marginBottom:3}}>{k}</div>
+            <div style={{fontSize:12,color:C.t1,lineHeight:1.6}}>{v}</div>
+          </div>
+        ))}
+      </div>}
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7,marginBottom:12}}>
+        {[['Owner',owner?.name||'—'],['Team',p.team||'—'],['Category',p.category],['Created',p.created],['Linked Incidents',p.linkedIncidents?.join(', ')||'None']].map(([k,v])=>(
+          <div key={k} style={{background:'#F8FAFC',borderRadius:6,padding:'6px 9px',gridColumn:k==='Linked Incidents'?'1/-1':undefined}}>
+            <div style={{fontSize:9,color:C.t3,marginBottom:2,textTransform:'uppercase'}}>{k}</div>
+            <div style={{fontSize:11,fontWeight:600,color:C.t1}}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{background:'#F8FAFC',borderRadius:6,padding:'9px 11px',marginBottom:12}}>
+        <div style={{fontSize:9,color:C.t3,marginBottom:3,textTransform:'uppercase'}}>Description</div>
+        <div style={{fontSize:12,color:C.t1,lineHeight:1.6}}>{p.desc}</div>
+      </div>
+
+      {/* Timeline */}
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:800,color:C.t1,marginBottom:8}}>Timeline</div>
+        {[...p.timeline].reverse().map((t,i)=>{
+          const actor=USERS.find(u=>u.id===t.by);
+          return <div key={i} style={{display:'flex',gap:8,marginBottom:7,paddingBottom:7,borderBottom:`1px solid ${C.borderFaint}`}}>
+            <Avatar name={actor?.name||'System'} size={22}/>
+            <div style={{flex:1}}><div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}><span style={{fontSize:10,fontWeight:700,color:C.t1}}>{actor?.name||'System'}</span><span style={{fontSize:9,color:C.t3}}>{t.at}</span></div>
+              <div style={{fontSize:10,color:C.purple,fontWeight:700}}>{t.action}</div>
+              {t.note&&<div style={{fontSize:10,color:C.t2,marginTop:1}}>{t.note}</div>}
+            </div>
+          </div>;})}
+      </div>
+
+      {canEdit&&!['Closed'].includes(p.status)&&<div style={{display:'flex',gap:7,alignItems:'flex-end'}}>
+        <div style={{flex:1}}><Textarea value={noteText} onChange={setNT} rows={2} placeholder="Add update or note…"/></div>
+        <Btn size="sm" onClick={addNote} disabled={!noteText.trim()}>Add</Btn>
+      </div>}
+    </div>;
+  };
+
+  return <div style={{display:'flex',height:'calc(100vh - 50px)'}}>
+    {/* Left panel */}
+    <div style={{flex:1,overflowY:'auto',padding:'16px 18px',borderRight:selected?`1px solid ${C.border}`:'none',minWidth:0}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+        <div><h2 style={{fontSize:16,fontWeight:800,color:C.t1,margin:'0 0 2px'}}>Problem Management</h2><p style={{fontSize:10,color:C.t2,margin:0}}>{problems.length} records · {kedbItems.length} KEDB entries</p></div>
+        {canEdit&&<Btn icon="+" onClick={()=>setSN(true)}>New Problem</Btn>}
+      </div>
+
+      <div style={{display:'flex',gap:0,marginBottom:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:3,width:'fit-content'}}>
+        {[['list','📋 Problems'],['kedb','📖 KEDB']].map(([v,l])=><button key={v} onClick={()=>setTab(v)} style={{padding:'5px 12px',borderRadius:5,border:'none',background:tab===v?C.purple:'transparent',color:tab===v?'#fff':C.t2,fontSize:11,fontWeight:tab===v?700:400,cursor:'pointer'}}>{l}{v==='kedb'?<span style={{marginLeft:5,background:tab==='kedb'?'rgba(255,255,255,0.3)':C.purpleLt,color:tab==='kedb'?'#fff':C.purple,borderRadius:10,fontSize:9,padding:'1px 5px',fontWeight:800}}>{kedbItems.length}</span>:''}</button>)}
+      </div>
+
+      {tab==='kedb'&&<div>
+        <div style={{background:C.purpleLt,border:`1px solid #DDD6FE`,borderRadius:8,padding:'10px 14px',marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:800,color:C.purple,marginBottom:2}}>📖 Known Error Database (KEDB)</div>
+          <div style={{fontSize:11,color:C.t2}}>Published workarounds for known issues. Visible to all helpdesk and agents.</div>
+        </div>
+        {kedbItems.length===0?<div style={{padding:40,textAlign:'center',color:C.t3}}>No KEDB entries yet</div>:kedbItems.map(p=>(
+          <div key={p.id} onClick={()=>setSelected(p)} style={{background:C.card,borderRadius:8,border:`1px solid ${selected?.id===p.id?C.purple:C.border}`,padding:'11px 14px',marginBottom:8,cursor:'pointer',transition:'all .15s',borderLeft:`4px solid ${C.purple}`}} onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(124,58,237,0.1)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+            <div style={{display:'flex',gap:6,marginBottom:5,flexWrap:'wrap',alignItems:'center'}}>
+              <Tag label={p.kedbId} color={C.purple} bg={C.purpleLt}/>
+              <ImpactBadge impact={p.impact}/>
+              <Tag label={p.category} color={C.t2} bg='#F1F5F9'/>
+            </div>
+            <div style={{fontSize:12,fontWeight:700,color:C.t1,marginBottom:4}}>{p.title}</div>
+            {p.workaround&&<div style={{fontSize:11,color:C.t2,background:C.purpleLt,padding:'6px 9px',borderRadius:5,marginTop:4}}>
+              <span style={{fontWeight:700,color:C.purple}}>Workaround: </span>{p.workaround}
+            </div>}
+          </div>
+        ))}
+      </div>}
+
+      {tab==='list'&&<>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:9,marginBottom:10,display:'flex',gap:7,flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:160}}><Input placeholder="Search problems…" value={search} onChange={v=>setSearch(v)}/></div>
+          <Sel value={fStatus} onChange={setFS} opts={[{v:'',l:'All Status'},...PROB_STATUS.map(s=>({v:s,l:s}))]} sx={{minWidth:160}}/>
+          <Sel value={fImpact} onChange={setFI} opts={[{v:'',l:'All Impact'},...PROB_IMPACT.map(s=>({v:s,l:s}))]} sx={{minWidth:120}}/>
+          {(search||fStatus||fImpact)&&<Btn variant="outline" size="sm" onClick={()=>{setSearch('');setFS('');setFI('');}}>Clear ×</Btn>}
+        </div>
+        {filtered.length===0&&<div style={{padding:40,textAlign:'center',color:C.t3,background:C.card,borderRadius:8,border:`1px solid ${C.border}`}}>No problems found</div>}
+        {filtered.map(p=>{
+          const owner=USERS.find(u=>u.id===p.owner);
+          const isV=selected?.id===p.id;
+          const impactColor={Critical:C.danger,High:C.orange,Medium:C.warning,Low:C.success}[p.impact]||C.t3;
+          return <div key={p.id} onClick={()=>setSelected(isV?null:p)} style={{background:C.card,borderRadius:8,border:`1px solid ${isV?C.purple:C.border}`,padding:'11px 14px',marginBottom:7,cursor:'pointer',transition:'all .15s',borderLeft:`4px solid ${impactColor}`}} onMouseEnter={e=>{if(!isV)e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)';}} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+            <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:4,alignItems:'center'}}>
+                  <span style={{fontFamily:'monospace',fontSize:10,color:C.purple,fontWeight:800}}>{p.id}</span>
+                  <ImpactBadge impact={p.impact}/>
+                  <StatusBadge status={p.status}/>
+                  {p.knownError&&<Tag label={`📖 ${p.kedbId}`} color={C.purple} bg={C.purpleLt}/>}
+                </div>
+                <div style={{fontSize:13,fontWeight:700,color:C.t1,marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.title}</div>
+                <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+                  <span style={{fontSize:10,color:C.t2}}>{p.category}</span>
+                  <span style={{fontSize:10,color:C.t3}}>{p.linkedIncidents?.length||0} linked incidents</span>
+                  <span style={{fontSize:10,color:C.t3}}>{p.updated}</span>
+                </div>
+              </div>
+              <div style={{textAlign:'right',flexShrink:0}}>
+                {owner&&<div style={{display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end'}}><Avatar name={owner.name} size={20}/><span style={{fontSize:10,color:C.t2}}>{owner.name.split(' ')[0]}</span></div>}
+              </div>
+            </div>
+          </div>;})}
+      </>}
+    </div>
+
+    {/* Detail panel */}
+    {selected&&<div style={{width:460,flexShrink:0,background:C.card,display:'flex',flexDirection:'column',animation:'slideIn .2s ease'}}>
+      <div style={{padding:'11px 14px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+        <span style={{fontSize:12,fontWeight:800,color:C.t1}}>{selected.id}</span>
+        <button onClick={()=>setSelected(null)} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:C.t3}}>×</button>
+      </div>
+      <div style={{flex:1,overflowY:'auto'}}><ProbDetail p={selected}/></div>
+    </div>}
+
+    <Modal open={showNew} title="Create Problem Record" onClose={()=>setSN(false)} width={560}><NewProbForm/></Modal>
+  </div>;
+};
+
+// ══════════════════════════════════════════════════════════════
+// CHANGE MANAGEMENT MODULE
+// ══════════════════════════════════════════════════════════════
+const ChangeModule=({me,changes,setChanges,problems,addToast})=>{
+  const[tab,setTab]=useState('list');
+  const[selected,setSelected]=useState(null);
+  const[showNew,setSN]=useState(false);
+  const[search,setSearch]=useState('');
+  const[fStatus,setFS]=useState('');
+  const[fType,setFT]=useState('');
+  const[cabComment,setCABComment]=useState('');
+  const[showCABVote,setSCAB]=useState(false);
+  const[implementNote,setIN]=useState('');
+
+  const filtered=useMemo(()=>{
+    const q=search.toLowerCase();
+    return changes.filter(c=>(!q||c.id.toLowerCase().includes(q)||c.title.toLowerCase().includes(q))&&(!fStatus||c.status===fStatus)&&(!fType||c.type===fType)).sort((a,b)=>b.id.localeCompare(a.id));
+  },[changes,search,fStatus,fType]);
+
+  const cabPending=changes.filter(c=>c.status==='CAB Review');
+  const isCabMember=CAB_ROLES.includes(me.role);
+  const canCreate=['AGENT','HELPDESK','SERVICE_MANAGER','ADMIN','SUPER_ADMIN'].includes(me.role);
+
+  const updateChange=(c)=>{setChanges(prev=>prev.map(x=>x.id===c.id?c:x));setSelected(c);addToast('success',`${c.id} updated`);};
+
+  const submitCABVote=(chg,vote)=>{
+    if(!cabComment.trim()&&vote==='Reject'){addToast('error','Rejection reason required');return;}
+    const votes=[...(chg.cabVotes||[]),{voter:me.id,vote,comment:cabComment,at:now()}];
+    const approvals=votes.filter(v=>v.vote==='Approve').length;
+    const rejections=votes.filter(v=>v.vote==='Reject').length;
+    const totalCAB=USERS.filter(u=>CAB_ROLES.includes(u.role)).length;
+    let newStatus=chg.status;
+    let histNote=`${vote} by ${me.name}. ${cabComment}`;
+    if(rejections>0){newStatus='Cancelled';histNote='CAB Rejected — Change cancelled.';}
+    else if(approvals>=Math.ceil(totalCAB/2)){newStatus='CAB Approved';histNote=`CAB Approved — ${approvals} votes in favour.`;}
+    const upd={...chg,cabVotes:votes,status:newStatus,updated:now(),timeline:[...chg.timeline,{action:`CAB Vote: ${vote}`,by:me.id,at:now(),note:histNote}]};
+    updateChange(upd);setCABComment('');setSCAB(false);
+    addToast(vote==='Approve'?'success':'warning',`CAB ${vote}: ${chg.id}`);
+  };
+
+  const NewChangeForm=()=>{
+    const[f,setF]=useState({type:'Normal',title:'',desc:'',category:CHG_CATS[0],risk:'Medium',impact:'Moderate',scheduledStart:'',scheduledEnd:'',rollbackPlan:'',testPlan:'',impactedSystems:'',justification:'',linkedProblems:''});
+    const[errs,setErrs]=useState({});
+    const ff=k=>v=>setF(p=>({...p,[k]:v}));
+    const chgType=CHG_TYPES[f.type]||CHG_TYPES.Normal;
+    const submit=()=>{
+      const e={};if(!f.title.trim())e.title='Required';if(!f.desc.trim())e.desc='Required';if(!f.rollbackPlan.trim())e.rollbackPlan='Rollback plan is required for all changes';if(!f.testPlan.trim())e.testPlan='Test plan is required';
+      if(Object.keys(e).length){setErrs(e);return;}
+      const initStatus=f.type==='Standard'?'Scheduled':f.type==='Emergency'?'In Progress':'Submitted';
+      const nc={id:genId('CHG'),type:f.type,title:f.title,desc:f.desc,category:f.category,risk:f.risk,impact:f.impact,status:initStatus,reqBy:me.id,owner:me.id,team:'IT',created:now(),updated:now(),scheduledStart:f.scheduledStart||'TBD',scheduledEnd:f.scheduledEnd||'TBD',rollbackPlan:f.rollbackPlan,testPlan:f.testPlan,impactedSystems:f.impactedSystems.split(',').map(s=>s.trim()).filter(Boolean),justification:f.justification,cabVotes:[],linkedProblems:f.linkedProblems?[f.linkedProblems]:[],
+        timeline:[{action:'Change Record Created',by:me.id,at:now(),note:`${chgType.label} — ${initStatus}`}]};
+      setChanges(p=>[nc,...p]);addToast('success',`${nc.id} created — ${initStatus}`);setSN(false);
+    };
+    return <div style={{display:'flex',flexDirection:'column',gap:0}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:7,marginBottom:12}}>
+        {Object.entries(CHG_TYPES).map(([k,v])=><div onClick={()=>ff('type')(k)} style={{padding:'10px 12px',borderRadius:8,border:`2px solid ${f.type===k?v.color:C.border}`,background:f.type===k?v.bg:'#fff',cursor:'pointer',transition:'all .15s'}}>
+          <div style={{fontSize:18,marginBottom:4}}>{v.icon}</div>
+          <div style={{fontSize:11,fontWeight:700,color:f.type===k?v.color:C.t1}}>{k}</div>
+          <div style={{fontSize:9,color:C.t2,marginTop:2}}>{v.desc}</div>
+          {v.cab&&<div style={{fontSize:9,color:C.warning,marginTop:3,fontWeight:700}}>Requires CAB</div>}
+        </div>)}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <Input label="Change Title" value={f.title} onChange={ff('title')} required error={errs.title} sx={{gridColumn:'1/-1'}}/>
+        <Textarea label="Description" value={f.desc} onChange={ff('desc')} required rows={2} sx={{gridColumn:'1/-1'}} error={errs.desc}/>
+        <Sel label="Category" value={f.category} onChange={ff('category')} opts={CHG_CATS.map(c=>({v:c,l:c}))} required/>
+        <Sel label="Risk Level" value={f.risk} onChange={ff('risk')} opts={RISK_LEVELS.map(r=>({v:r,l:r}))} required/>
+        <Sel label="Business Impact" value={f.impact} onChange={ff('impact')} opts={CHG_IMPACT.map(i=>({v:i,l:i}))} required/>
+        <Input label="Impacted Systems (comma-separated)" value={f.impactedSystems} onChange={ff('impactedSystems')} placeholder="Server-01, App-02…" sx={{gridColumn:'1/-1'}}/>
+        <Input label="Scheduled Start" type="datetime-local" value={f.scheduledStart} onChange={ff('scheduledStart')}/>
+        <Input label="Scheduled End" type="datetime-local" value={f.scheduledEnd} onChange={ff('scheduledEnd')}/>
+        <Textarea label="Business Justification" value={f.justification} onChange={ff('justification')} rows={2} sx={{gridColumn:'1/-1'}}/>
+        <Textarea label="Rollback Plan ★ Required" value={f.rollbackPlan} onChange={ff('rollbackPlan')} required rows={2} sx={{gridColumn:'1/-1'}} error={errs.rollbackPlan}/>
+        <Textarea label="Test Plan ★ Required" value={f.testPlan} onChange={ff('testPlan')} required rows={2} sx={{gridColumn:'1/-1'}} error={errs.testPlan}/>
+        <Sel label="Link to Problem" value={f.linkedProblems} onChange={ff('linkedProblems')} opts={[{v:'',l:'— None —'},...problems.map(p=>({v:p.id,l:`${p.id}: ${p.title.substring(0,40)}`}))]} sx={{gridColumn:'1/-1'}}/>
+      </div>
+      <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:14,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+        <Btn variant="outline" onClick={()=>setSN(false)}>Cancel</Btn>
+        <Btn onClick={submit}>{CHG_TYPES[f.type]?.icon} Submit {f.type} Change</Btn>
+      </div>
+    </div>;
+  };
+
+  const ChangeDetail=({chg})=>{
+    const[showImpl,setSI]=useState(false);
+    const reqUser=USERS.find(u=>u.id===chg.reqBy);
+    const owner=USERS.find(u=>u.id===chg.owner);
+    const chgType=CHG_TYPES[chg.type]||CHG_TYPES.Normal;
+    const myVote=(chg.cabVotes||[]).find(v=>v.voter===me.id);
+    const canVote=isCabMember&&chg.status==='CAB Review'&&!myVote;
+    const canImplement=['SERVICE_MANAGER','ADMIN','SUPER_ADMIN'].includes(me.role)||chg.owner===me.id;
+    const approvals=(chg.cabVotes||[]).filter(v=>v.vote==='Approve').length;
+    const totalCAB=USERS.filter(u=>CAB_ROLES.includes(u.role)).length;
+
+    const doAction=(action,ns,note)=>{
+      updateChange({...chg,status:ns,updated:now(),timeline:[...chg.timeline,{action,by:me.id,at:now(),note:note||action}]});
+    };
+
+    const submitForCAB=()=>doAction('Submitted for CAB Review','CAB Review','Change submitted for CAB voting');
+    const startImpl=()=>{setIN('');setSI(true);};
+    const confirmStart=()=>{doAction('Implementation Started','In Progress',implementNote||'Implementation started');setSI(false);setIN('');};
+    const markComplete=()=>doAction('Change Completed','Completed','Change implemented successfully');
+    const markFailed=()=>doAction('Change Failed — Rollback Initiated','Failed','Implementation failed. Rollback executed.');
+    const rollback=()=>doAction('Rolled Back','Rolled Back','Change rolled back to previous state');
+
+    return <div style={{padding:16,overflowY:'auto',flex:1}}>
+      <div style={{display:'flex',gap:7,flexWrap:'wrap',marginBottom:8}}>
+        <TypeBadge type={chg.type}/>
+        <StatusBadge status={chg.status} module="chg"/>
+        <ImpactBadge impact={chg.risk}/>
+        <Tag label={chg.category} color={C.t2} bg='#F1F5F9'/>
+      </div>
+      <h3 style={{fontSize:14,fontWeight:800,color:C.t1,margin:'0 0 10px',lineHeight:1.3}}>{chg.title}</h3>
+
+      {/* Actions */}
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>
+        {chg.status==='Draft'&&canImplement&&<Btn size="sm" variant="primary" onClick={submitForCAB}>📤 Submit for CAB</Btn>}
+        {canVote&&<Btn size="sm" variant="warning" onClick={()=>setSCAB(!showCABVote)}>🗳 Cast CAB Vote</Btn>}
+        {chg.status==='CAB Approved'&&canImplement&&<Btn size="sm" variant="primary" onClick={startImpl}>▶ Start Implementation</Btn>}
+        {chg.status==='Scheduled'&&canImplement&&<Btn size="sm" variant="primary" onClick={startImpl}>▶ Start Implementation</Btn>}
+        {chg.status==='In Progress'&&canImplement&&<>
+          <Btn size="sm" variant="success" onClick={markComplete}>✓ Mark Completed</Btn>
+          <Btn size="sm" variant="danger" onClick={markFailed}>✗ Mark Failed</Btn>
+        </>}
+        {chg.status==='Failed'&&canImplement&&<Btn size="sm" variant="warning" onClick={rollback}>↩ Rollback</Btn>}
+      </div>
+
+      {showCABVote&&<div style={{background:C.warningLt,border:'1px solid #FDE68A',borderRadius:8,padding:12,marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:800,color:C.warning,marginBottom:7}}>🗳 Cast Your CAB Vote</div>
+        <div style={{fontSize:11,color:C.t2,marginBottom:8}}>Current: {approvals}/{totalCAB} approvals. Need {Math.ceil(totalCAB/2)} to pass.</div>
+        <Textarea label="Comments / Conditions" value={cabComment} onChange={setCABComment} rows={2} placeholder="Add approval conditions or rejection reason…"/>
+        <div style={{display:'flex',gap:7,marginTop:8}}>
+          <Btn size="sm" variant="success" onClick={()=>submitCABVote(chg,'Approve')}>✓ Approve</Btn>
+          <Btn size="sm" variant="danger" onClick={()=>submitCABVote(chg,'Reject')}>✗ Reject</Btn>
+          <Btn size="sm" variant="outline" onClick={()=>setSCAB(false)}>Cancel</Btn>
+        </div>
+      </div>}
+
+      {showImpl&&<div style={{background:C.primaryLt,border:`1px solid #BFDBFE`,borderRadius:8,padding:12,marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:800,color:C.primary,marginBottom:7}}>▶ Confirm Implementation Start</div>
+        <Textarea label="Implementation Notes" value={implementNote} onChange={setIN} rows={2} placeholder="Any pre-change notes, team on standby…"/>
+        <div style={{display:'flex',gap:7,marginTop:8}}><Btn size="sm" onClick={confirmStart}>Confirm Start</Btn><Btn size="sm" variant="outline" onClick={()=>setSI(false)}>Cancel</Btn></div>
+      </div>}
+
+      {/* CAB votes panel */}
+      {chg.type==='Normal'&&<div style={{marginBottom:12,background:'#F8FAFC',border:`1px solid ${C.border}`,borderRadius:8,padding:11}}>
+        <div style={{fontSize:11,fontWeight:800,color:C.t1,marginBottom:8}}>🗳 CAB Voting ({approvals}/{totalCAB} Approved)</div>
+        <div style={{display:'flex',gap:4,marginBottom:8}}>
+          <div style={{flex:1,height:6,background:'#E2E8F0',borderRadius:3,overflow:'hidden'}}><div style={{height:6,background:C.success,borderRadius:3,width:`${totalCAB>0?(approvals/totalCAB)*100:0}%`,transition:'width .5s'}}/></div>
+        </div>
+        {USERS.filter(u=>CAB_ROLES.includes(u.role)).map(u=>{
+          const vote=(chg.cabVotes||[]).find(v=>v.voter===u.id);
+          return <div key={u.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
+            <Avatar name={u.name} size={20}/>
+            <span style={{fontSize:11,color:C.t1,flex:1}}>{u.name}</span>
+            <RoleBadge role={u.role}/>
+            {vote?<span style={{fontSize:10,fontWeight:800,color:vote.vote==='Approve'?C.success:C.danger}}>{vote.vote==='Approve'?'✓ Approved':'✗ Rejected'}</span>:<span style={{fontSize:10,color:C.t3}}>Pending</span>}
+          </div>;})}
+      </div>}
+
+      {/* Details grid */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7,marginBottom:10}}>
+        {[['Raised By',reqUser?.name||'—'],['Owner',owner?.name||'—'],['Scheduled',chg.scheduledStart],['End',chg.scheduledEnd||'—'],['Risk',chg.risk],['Impact',chg.impact]].map(([k,v])=>(
+          <div key={k} style={{background:'#F8FAFC',borderRadius:6,padding:'6px 9px'}}><div style={{fontSize:9,color:C.t3,marginBottom:2,textTransform:'uppercase'}}>{k}</div><div style={{fontSize:11,fontWeight:600,color:C.t1}}>{v}</div></div>
+        ))}
+      </div>
+      {chg.impactedSystems?.length>0&&<div style={{background:'#F8FAFC',borderRadius:6,padding:'7px 10px',marginBottom:9}}><div style={{fontSize:9,color:C.t3,marginBottom:3,textTransform:'uppercase'}}>Impacted Systems</div><div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{chg.impactedSystems.map(s=><Tag key={s} label={s} color={C.t2} bg='#F1F5F9'/>)}</div></div>}
+      <div style={{background:'#F8FAFC',borderRadius:6,padding:'7px 10px',marginBottom:8}}><div style={{fontSize:9,color:C.t3,marginBottom:3,textTransform:'uppercase'}}>Description</div><div style={{fontSize:11,color:C.t1,lineHeight:1.6}}>{chg.desc}</div></div>
+      {chg.justification&&<div style={{background:'#F8FAFC',borderRadius:6,padding:'7px 10px',marginBottom:8}}><div style={{fontSize:9,color:C.t3,marginBottom:3,textTransform:'uppercase'}}>Justification</div><div style={{fontSize:11,color:C.t1,lineHeight:1.6}}>{chg.justification}</div></div>}
+      {[['↩ Rollback Plan',chg.rollbackPlan,C.orange],['🧪 Test Plan',chg.testPlan,C.teal]].map(([k,v,col])=>v&&<div key={k} style={{marginBottom:8,background:'#F8FAFC',border:`1px solid ${C.border}`,borderRadius:6,padding:'8px 10px',borderLeft:`3px solid ${col}`}}>
+        <div style={{fontSize:9,color:col,fontWeight:800,textTransform:'uppercase',marginBottom:3}}>{k}</div>
+        <div style={{fontSize:11,color:C.t1,lineHeight:1.6}}>{v}</div>
+      </div>)}
+      {chg.linkedProblems?.length>0&&<div style={{background:C.purpleLt,border:`1px solid #DDD6FE`,borderRadius:6,padding:'7px 10px',marginBottom:8}}><div style={{fontSize:9,color:C.purple,fontWeight:800,marginBottom:3}}>LINKED PROBLEMS</div><div style={{display:'flex',gap:5,flexWrap:'wrap'}}>{chg.linkedProblems.map(p=><Tag key={p} label={p} color={C.purple} bg={C.purpleLt}/>)}</div></div>}
+
+      {/* Timeline */}
+      <div style={{marginTop:10}}>
+        <div style={{fontSize:11,fontWeight:800,color:C.t1,marginBottom:8}}>Change Timeline</div>
+        {[...chg.timeline].reverse().map((t,i)=>{
+          const actor=USERS.find(u=>u.id===t.by);
+          return <div key={i} style={{display:'flex',gap:8,marginBottom:7,paddingBottom:7,borderBottom:`1px solid ${C.borderFaint}`}}>
+            <Avatar name={actor?.name||'System'} size={22}/>
+            <div style={{flex:1}}><div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}><span style={{fontSize:10,fontWeight:700,color:C.t1}}>{actor?.name||'System'}</span><span style={{fontSize:9,color:C.t3}}>{t.at}</span></div>
+              <div style={{fontSize:10,color:C.teal,fontWeight:700}}>{t.action}</div>
+              {t.note&&<div style={{fontSize:10,color:C.t2,marginTop:1}}>{t.note}</div>}
+            </div>
+          </div>;})}
+      </div>
+    </div>;
+  };
+
+  // Change Calendar view
+  const CalendarView=()=>{
+    const upcoming=changes.filter(c=>!['Completed','Cancelled','Failed','Rolled Back'].includes(c.status)).sort((a,b)=>a.scheduledStart?.localeCompare?.(b.scheduledStart)||0);
+    const statusColors={'Draft':C.t3,'Submitted':'#6366F1','CAB Review':C.warning,'CAB Approved':C.success,'Scheduled':C.cyan,'In Progress':C.primary};
+    return <div style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:16}}>
+      <div style={{fontSize:12,fontWeight:800,color:C.t1,marginBottom:12}}>📅 Change Calendar</div>
+      {upcoming.length===0?<p style={{fontSize:11,color:C.t3,textAlign:'center',padding:30}}>No upcoming changes</p>:upcoming.map(c=>{
+        const ct=CHG_TYPES[c.type]||CHG_TYPES.Normal;
+        return <div key={c.id} onClick={()=>{setSelected(c);setTab('list');}} style={{display:'flex',gap:10,padding:'10px 12px',marginBottom:8,borderRadius:8,border:`1px solid ${C.border}`,background:'#F8FAFC',cursor:'pointer',transition:'all .15s',borderLeft:`4px solid ${ct.color}`}} onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+          <div style={{textAlign:'center',minWidth:50,flexShrink:0}}>
+            <div style={{fontSize:20}}>{ct.icon}</div>
+            <div style={{fontSize:8,color:ct.color,fontWeight:800,textTransform:'uppercase'}}>{c.type}</div>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:3,flexWrap:'wrap'}}>
+              <span style={{fontFamily:'monospace',fontSize:10,color:C.t3}}>{c.id}</span>
+              <StatusBadge status={c.status} module="chg"/>
+            </div>
+            <div style={{fontSize:12,fontWeight:700,color:C.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.title}</div>
+            <div style={{display:'flex',gap:8,marginTop:2}}><span style={{fontSize:10,color:C.t2}}>📅 {c.scheduledStart}</span><ImpactBadge impact={c.risk}/></div>
+          </div>
+        </div>;})}
+    </div>;
+  };
+
+  return <div style={{display:'flex',height:'calc(100vh - 50px)'}}>
+    <div style={{flex:1,overflowY:'auto',padding:'16px 18px',borderRight:selected?`1px solid ${C.border}`:'none',minWidth:0}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+        <div><h2 style={{fontSize:16,fontWeight:800,color:C.t1,margin:'0 0 2px'}}>Change Management</h2><p style={{fontSize:10,color:C.t2,margin:0}}>CAB-based approval · Risk-rated · Rollback tracked</p></div>
+        {canCreate&&<Btn icon="+" onClick={()=>setSN(true)}>New Change</Btn>}
+      </div>
+
+      <div style={{display:'flex',gap:0,marginBottom:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:3,width:'fit-content'}}>
+        {[['list','📋 All Changes'],['cab','🗳 CAB Queue'],['calendar','📅 Calendar']].map(([v,l])=><button key={v} onClick={()=>setTab(v)} style={{padding:'5px 12px',borderRadius:5,border:'none',background:tab===v?C.teal:'transparent',color:tab===v?'#fff':C.t2,fontSize:11,fontWeight:tab===v?700:400,cursor:'pointer'}}>{l}{v==='cab'&&cabPending.length>0?<span style={{marginLeft:5,background:C.warningLt,color:C.warning,borderRadius:10,fontSize:9,padding:'1px 5px',fontWeight:800}}>{cabPending.length}</span>:''}</button>)}
+      </div>
+
+      {tab==='calendar'&&<CalendarView/>}
+
+      {tab==='cab'&&<div>
+        <div style={{background:C.warningLt,border:`1px solid #FDE68A`,borderRadius:8,padding:'10px 14px',marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:800,color:C.warning,marginBottom:2}}>🗳 Change Advisory Board (CAB) Review Queue</div>
+          <div style={{fontSize:11,color:C.t2}}>CAB members: {USERS.filter(u=>CAB_ROLES.includes(u.role)).map(u=>u.name).join(', ')}</div>
+        </div>
+        {cabPending.length===0?<div style={{padding:40,textAlign:'center',color:C.t3,background:C.card,borderRadius:8,border:`1px solid ${C.border}`}}>No changes pending CAB review</div>:cabPending.map(c=>{
+          const ct=CHG_TYPES[c.type]||CHG_TYPES.Normal;
+          const myVote=(c.cabVotes||[]).find(v=>v.voter===me.id);
+          const approvals=(c.cabVotes||[]).filter(v=>v.vote==='Approve').length;
+          const totalCAB=USERS.filter(u=>CAB_ROLES.includes(u.role)).length;
+          return <div key={c.id} onClick={()=>setSelected(selected?.id===c.id?null:c)} style={{background:C.card,borderRadius:8,border:`1px solid ${selected?.id===c.id?C.teal:C.warning}`,padding:'12px 14px',marginBottom:8,cursor:'pointer',borderLeft:`4px solid ${ct.color}`}} onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+            <div style={{display:'flex',gap:7,flexWrap:'wrap',marginBottom:6,alignItems:'center'}}>
+              <span style={{fontFamily:'monospace',fontSize:10,color:C.t3,fontWeight:800}}>{c.id}</span>
+              <TypeBadge type={c.type}/><ImpactBadge impact={c.risk}/>
+              {isCabMember&&!myVote&&<Tag label="⏳ Your Vote Needed" color={C.warning} bg={C.warningLt}/>}
+              {myVote&&<Tag label={`✓ You: ${myVote.vote}d`} color={myVote.vote==='Approve'?C.success:C.danger} bg={myVote.vote==='Approve'?C.successLt:C.dangerLt}/>}
+            </div>
+            <div style={{fontSize:13,fontWeight:700,color:C.t1,marginBottom:4}}>{c.title}</div>
+            <div style={{display:'flex',gap:10,alignItems:'center'}}>
+              <span style={{fontSize:10,color:C.t2}}>Submitted: {c.updated}</span>
+              <span style={{fontSize:10,color:C.success,fontWeight:700}}>{approvals}/{totalCAB} votes</span>
+            </div>
+          </div>;})}
+      </div>}
+
+      {tab==='list'&&<>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:9,marginBottom:10,display:'flex',gap:7,flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:160}}><Input placeholder="Search changes…" value={search} onChange={v=>setSearch(v)}/></div>
+          <Sel value={fType} onChange={setFT} opts={[{v:'',l:'All Types'},...Object.keys(CHG_TYPES).map(k=>({v:k,l:k}))]} sx={{minWidth:120}}/>
+          <Sel value={fStatus} onChange={setFS} opts={[{v:'',l:'All Status'},...CHG_STATUS.map(s=>({v:s,l:s}))]} sx={{minWidth:140}}/>
+          {(search||fStatus||fType)&&<Btn variant="outline" size="sm" onClick={()=>{setSearch('');setFS('');setFT('');}}>Clear ×</Btn>}
+        </div>
+        {filtered.length===0&&<div style={{padding:40,textAlign:'center',color:C.t3,background:C.card,borderRadius:8,border:`1px solid ${C.border}`}}>No changes found</div>}
+        {filtered.map(c=>{
+          const ct=CHG_TYPES[c.type]||CHG_TYPES.Normal;
+          const isV=selected?.id===c.id;
+          const myVote=(c.cabVotes||[]).find(v=>v.voter===me.id);
+          const needsMyVote=isCabMember&&c.status==='CAB Review'&&!myVote;
+          return <div key={c.id} onClick={()=>setSelected(isV?null:c)} style={{background:C.card,borderRadius:8,border:`1px solid ${isV?C.teal:needsMyVote?C.warning:C.border}`,padding:'11px 14px',marginBottom:7,cursor:'pointer',transition:'all .15s',borderLeft:`4px solid ${ct.color}`}} onMouseEnter={e=>{if(!isV)e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)';}} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+            <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:4,alignItems:'center'}}>
+                  <span style={{fontFamily:'monospace',fontSize:10,color:C.t3,fontWeight:800}}>{c.id}</span>
+                  <TypeBadge type={c.type}/><StatusBadge status={c.status} module="chg"/><ImpactBadge impact={c.risk}/>
+                  {needsMyVote&&<Tag label="⏳ Vote" color={C.warning} bg={C.warningLt}/>}
+                </div>
+                <div style={{fontSize:13,fontWeight:700,color:C.t1,marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.title}</div>
+                <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+                  <span style={{fontSize:10,color:C.t2}}>{c.category}</span>
+                  <span style={{fontSize:10,color:C.t3}}>Scheduled: {c.scheduledStart}</span>
+                  <span style={{fontSize:10,color:C.t3}}>{c.updated}</span>
+                </div>
+              </div>
+              <ImpactBadge impact={c.impact}/>
+            </div>
+          </div>;})}
+      </>}
+    </div>
+
+    {selected&&<div style={{width:480,flexShrink:0,background:C.card,display:'flex',flexDirection:'column',animation:'slideIn .2s ease'}}>
+      <div style={{padding:'11px 14px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+        <div style={{display:'flex',gap:7,alignItems:'center'}}><span style={{fontSize:12,fontWeight:800,color:C.t1}}>{selected.id}</span><TypeBadge type={selected.type}/></div>
+        <button onClick={()=>setSelected(null)} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:C.t3}}>×</button>
+      </div>
+      <div style={{flex:1,overflowY:'auto'}}><ChangeDetail chg={selected}/></div>
+    </div>}
+
+    <Modal open={showNew} title="Create Change Request" onClose={()=>setSN(false)} width={640}><NewChangeForm/></Modal>
+  </div>;
+};
+
+// ─── MODULE SHELL ─────────────────────────────────
+const Shell=({module})=>{
+  const M={incidents:{t:'Incident Management',icon:'🚨',color:C.danger,pt:'Part 3 ✓'},service_req:{t:'Service Request Management',icon:'📋',color:C.success,pt:'Part 3 ✓'},imac:{t:'IMAC Module',icon:'🔄',color:C.primary,pt:'Part 2 ✓'},cmdb:{t:'Asset & CMDB',icon:'🖥️',color:C.cyan,pt:'Part 5'},knowledge:{t:'Knowledge Base',icon:'📚',color:C.success,pt:'Part 6'},sla:{t:'SLA & Escalation',icon:'⏱️',color:C.warning,pt:'Part 6'},employees:{t:'Employee Mgmt',icon:'👥',color:C.primary,pt:'Part 2 ✓'},users:{t:'User Mgmt',icon:'🔐',color:C.primary,pt:'Part 1 ✓'},reports:{t:'Reports',icon:'📊',color:C.purple,pt:'Part 7'}};
+  const c=M[module]||{t:module,icon:'📋',color:C.primary,pt:'Upcoming'};
+  return <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'calc(100vh - 110px)'}}>
+    <div style={{textAlign:'center',maxWidth:400}}>
+      <div style={{width:64,height:64,borderRadius:16,background:`${c.color}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:30,margin:'0 auto 14px'}}>{c.icon}</div>
+      <h2 style={{fontSize:18,fontWeight:800,color:C.t1,margin:'0 0 6px'}}>{c.t}</h2>
+      <div style={{background:`${c.color}0D`,border:`1px dashed ${c.color}60`,borderRadius:8,padding:'10px 14px',display:'inline-flex',alignItems:'center',gap:8}}>
+        <span style={{fontSize:16}}>🔨</span><div><div style={{fontSize:10,fontWeight:800,color:c.color}}>{c.pt}</div><div style={{fontSize:10,color:C.t2}}>Module in scheduled part</div></div>
+      </div>
+    </div>
+  </div>;
+};
+
+// ─── LOGIN ────────────────────────────────────────
+const Login=({onLogin})=>{
+  const[email,setEmail]=useState('');
+  const[pw,setPw]=useState('');
+  const[loading,setL]=useState(false);
+  const[err,setErr]=useState('');
+  const[sel,setSel]=useState(null);
+  const DEMOS=[{r:'SUPER_ADMIN',e:'superadmin@itsm.com',p:'Admin@123'},{r:'ADMIN',e:'admin@itsm.com',p:'Admin@123'},{r:'EMPLOYEE',e:'employee@company.com',p:'Employee@123'},{r:'HELPDESK',e:'helpdesk@company.com',p:'Helpdesk@123'},{r:'AGENT',e:'agent@company.com',p:'Agent@123'},{r:'SERVICE_MANAGER',e:'manager@company.com',p:'Manager@123'}];
+  const fill=d=>{setEmail(d.e);setPw(d.p);setSel(d.r);setErr('');};
+  const sub=e=>{e.preventDefault();if(!email||!pw){setErr('Enter credentials');return;}setL(true);setTimeout(()=>{const u=USERS.find(x=>x.email===email&&x.pw===pw);if(!u){setErr('Invalid credentials');setL(false);return;}onLogin(u);},600);};
+  return <div style={{minHeight:'100vh',display:'flex',background:C.bg}}>
+    <div style={{width:'42%',background:'linear-gradient(150deg,#0D1B2A,#0F2540 60%,#1A3A6C)',display:'flex',flexDirection:'column',justifyContent:'space-between',padding:40,position:'relative',overflow:'hidden'}}>
+      <div style={{position:'absolute',top:-60,left:-60,width:260,height:260,borderRadius:'50%',background:'rgba(37,99,235,0.07)'}}/>
+      <div><div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:36,height:36,borderRadius:8,background:C.primary,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>⚡</div><div><div style={{fontSize:17,fontWeight:800,color:'#fff'}}>ITSM<span style={{color:'#60A5FA'}}>Pro</span></div><div style={{fontSize:8,color:'#475569',letterSpacing:'0.1em',textTransform:'uppercase'}}>Enterprise Service Mgmt</div></div></div></div>
+      <div>
+        <div style={{fontSize:10,fontWeight:700,color:'#A78BFA',letterSpacing:'0.1em',marginBottom:6}}>✅ Part 4 Live</div>
+        <h1 style={{fontSize:26,fontWeight:800,color:'#fff',margin:'0 0 10px',lineHeight:1.2}}>Problem & Change<br/><span style={{color:'#60A5FA'}}>Management</span></h1>
+        {['Root Cause Analysis (RCA)','Known Error Database (KEDB)','Incident-to-Problem Linking','CAB Voting Workflow','3 Change Types: Std/Normal/Emergency','Risk & Impact Assessment','Rollback Plan Tracking','Change Calendar View','Problem-to-Change Linking'].map((f,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}><div style={{width:16,height:16,borderRadius:'50%',background:'rgba(167,139,250,0.2)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><div style={{width:5,height:5,borderRadius:'50%',background:'#A78BFA'}}/></div><span style={{fontSize:11,color:'#94A3B8'}}>{f}</span></div>)}
+      </div>
+      <div style={{display:'flex',gap:20,borderTop:'1px solid rgba(255,255,255,0.07)',paddingTop:16}}>{[['5','Problems'],['3','KEDB'],['6','Changes']].map(([v,l])=><div key={l}><div style={{fontSize:16,fontWeight:800,color:'#fff'}}>{v}</div><div style={{fontSize:10,color:'#475569'}}>{l}</div></div>)}</div>
+    </div>
+    <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:'40px 50px'}}>
+      <div style={{width:'100%',maxWidth:380}}>
+        <h2 style={{fontSize:22,fontWeight:800,color:C.t1,margin:'0 0 4px'}}>Sign In</h2>
+        <p style={{fontSize:12,color:C.t2,margin:'0 0 18px'}}>ITSM Pro — Part 4</p>
+        <div style={{background:'#F8FAFC',border:`1px solid ${C.border}`,borderRadius:8,padding:12,marginBottom:18}}>
+          <p style={{fontSize:9,fontWeight:800,color:C.t3,letterSpacing:'0.1em',textTransform:'uppercase',margin:'0 0 7px'}}>Quick Login</p>
+          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+            {DEMOS.map(d=>{const m=ROLE_META[d.r];const a=sel===d.r;return <button key={d.r} onClick={()=>fill(d)} style={{padding:'3px 8px',borderRadius:20,fontSize:10,fontWeight:700,border:`1px solid ${a?m.color:m.border}`,background:a?m.bg:'#fff',color:a?m.color:C.t2,cursor:'pointer'}}>{m.label}</button>;})}
+          </div>
+        </div>
+        <form onSubmit={sub} style={{display:'flex',flexDirection:'column',gap:11}}>
+          <Input label="Email" type="email" value={email} onChange={setEmail} required placeholder="you@company.com"/>
+          <Input label="Password" type="password" value={pw} onChange={setPw} required placeholder="Password"/>
+          {err&&<div style={{padding:'8px 11px',background:C.dangerLt,border:`1px solid #FECACA`,borderRadius:6,fontSize:12,color:C.danger}}>⚠ {err}</div>}
+          <Btn type="submit" size="lg" disabled={loading} sx={{width:'100%',justifyContent:'center',marginTop:3}}>{loading?'Signing in…':'Sign In →'}</Btn>
+        </form>
+      </div>
+    </div>
+  </div>;
+};
+
+// ─── MAIN APP ─────────────────────────────────────
+function App(){
+  const[user,setUser]=useState(null);
+  const[problems,setProblems]=useState(SEED_PROBLEMS);
+  const[changes,setChanges]=useState(SEED_CHANGES);
+  const[active,setActive]=useState('dashboard');
+  const[col,setCol]=useState(false);
+  const[toasts,setToasts]=useState([]);
+  const addToast=(type,msg)=>{const id=Date.now();setToasts(p=>[...p,{id,type,msg}]);setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),4200);};
+  const login=u=>{setUser(u);setActive('dashboard');addToast('success',`Welcome, ${u.name}!`);};
+  const logout=()=>{setUser(null);setActive('dashboard');};
+  if(!user)return <Login onLogin={login}/>;
+  const sw=col?56:228;
+  const render=()=>{
+    if(active==='dashboard')return <Dashboard user={user} problems={problems} changes={changes}/>;
+    if(active==='problems')return <ProblemModule me={user} problems={problems} setProblems={setProblems} addToast={addToast}/>;
+    if(active==='changes')return <ChangeModule me={user} changes={changes} setChanges={setChanges} problems={problems} addToast={addToast}/>;
+    return <Shell module={active}/>;
+  };
+  return <div style={{display:'flex',minHeight:'100vh'}}>
+    <Sidebar user={user} active={active} onNav={m=>setActive(m)} col={col} setCol={setCol}/>
+    <div style={{marginLeft:sw,flex:1,transition:'margin-left .2s',display:'flex',flexDirection:'column',minHeight:'100vh'}}>
+      <Header user={user} active={active} changes={changes} onLogout={logout}/>
+      <main style={{flex:1,overflow:'hidden'}}>{render()}</main>
+    </div>
+    <Toast toasts={toasts} rem={id=>setToasts(p=>p.filter(t=>t.id!==id))}/>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
