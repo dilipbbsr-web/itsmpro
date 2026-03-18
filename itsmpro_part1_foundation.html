@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ITSMPro - Part 1: Foundation & Auth</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-dark: #0f1d2d;
+            --secondary-dark: #1a2f42;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --text-primary: #e0e7ff;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, #1a2f42 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 60px;
+            animation: slideDown 0.8s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .logo-icon {
+            font-size: 32px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .logo-text {
+            background: linear-gradient(135deg, #3b82f6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .breadcrumb {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .auth-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .auth-status:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            animation: blink 2s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Main content sections */
+        .section {
+            margin-bottom: 80px;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-primary);
+        }
+
+        .section-icon {
+            font-size: 28px;
+            color: var(--accent-blue);
+        }
+
+        /* Cards grid */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: linear-gradient(135deg, rgba(26, 47, 66, 0.8) 0%, rgba(30, 58, 80, 0.8) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
+            position: relative;
+            overflow: hidden;
+            animation: fadeInUp 0.6s ease-out both;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .cards-grid > .card:nth-child(1) { animation-delay: 0.1s; }
+        .cards-grid > .card:nth-child(2) { animation-delay: 0.2s; }
+        .cards-grid > .card:nth-child(3) { animation-delay: 0.3s; }
+        .cards-grid > .card:nth-child(4) { animation-delay: 0.4s; }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .card:hover {
+            border-color: var(--accent-blue);
+            background: linear-gradient(135deg, rgba(26, 47, 66, 1) 0%, rgba(30, 58, 80, 1) 100%);
+            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2);
+            transform: translateY(-8px);
+        }
+
+        .card:hover::before {
+            left: 100%;
+        }
+
+        .card-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            display: block;
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover .card-icon {
+            transform: scale(1.1) rotate(5deg);
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .card-description {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .card-tag {
+            display: inline-block;
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--accent-blue);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        /* Features section */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .feature-item {
+            background: rgba(26, 47, 66, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            animation: fadeIn 0.8s ease-out backwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .feature-item:nth-child(1) { animation-delay: 0.5s; }
+        .feature-item:nth-child(2) { animation-delay: 0.6s; }
+        .feature-item:nth-child(3) { animation-delay: 0.7s; }
+        .feature-item:nth-child(4) { animation-delay: 0.8s; }
+
+        .feature-item:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(6, 182, 212, 0.1);
+            transform: translateX(8px);
+        }
+
+        .feature-icon {
+            font-size: 24px;
+            margin-bottom: 12px;
+        }
+
+        .feature-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .feature-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* Status boxes */
+        .status-boxes {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 30px;
+        }
+
+        .status-box {
+            background: rgba(26, 47, 66, 0.6);
+            border-left: 4px solid var(--accent-blue);
+            padding: 16px;
+            border-radius: 8px;
+            animation: slideInRight 0.6s ease-out backwards;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .status-box:nth-child(2) { 
+            border-left-color: var(--accent-cyan);
+            animation-delay: 0.1s;
+        }
+        .status-box:nth-child(3) { 
+            border-left-color: #10b981;
+            animation-delay: 0.2s;
+        }
+
+        .status-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .status-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* Button styles */
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);
+        }
+
+        .button-secondary {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .button-secondary:hover {
+            border-color: var(--accent-blue);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding-top: 40px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 12px;
+            margin-top: 60px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 20px;
+                text-align: center;
+                margin-bottom: 40px;
+            }
+
+            .cards-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .logo {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="container">
+        <div class="header">
+            <div>
+                <div class="logo">
+                    <span class="logo-icon">⚡</span>
+                    <span class="logo-text">ITSMPro</span>
+                </div>
+                <div class="breadcrumb">Enterprise IT Service Management → Part 1: Foundation & Auth</div>
+            </div>
+            <div class="auth-status">
+                <span class="status-indicator"></span>
+                <span>Admin Authenticated</span>
+            </div>
+        </div>
+
+        <!-- Foundation Components -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">🔐</span>
+                Foundation Components
+            </h2>
+            <div class="cards-grid">
+                <div class="card">
+                    <span class="card-icon">🔑</span>
+                    <h3 class="card-title">Authentication</h3>
+                    <p class="card-description">Multi-factor authentication, SSO integration, OAuth 2.0 support, SAML configuration, and session management.</p>
+                    <span class="card-tag">Core Service</span>
+                </div>
+
+                <div class="card">
+                    <span class="card-icon">🪙</span>
+                    <h3 class="card-title">JWT Management</h3>
+                    <p class="card-description">Token generation, refresh token handling, JWT validation, expiration policies, and revocation mechanisms.</p>
+                    <span class="card-tag">Security Layer</span>
+                </div>
+
+                <div class="card">
+                    <span class="card-icon">🛡️</span>
+                    <h3 class="card-title">RBAC System</h3>
+                    <p class="card-description">Role-based access control, permission matrices, resource policies, delegation rules, and audit trails.</p>
+                    <span class="card-tag">Access Control</span>
+                </div>
+
+                <div class="card">
+                    <span class="card-icon">👥</span>
+                    <h3 class="card-title">User Management</h3>
+                    <p class="card-description">User provisioning, profile management, group administration, team hierarchies, and identity federation.</p>
+                    <span class="card-tag">Identity</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Key Features -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">⭐</span>
+                Key Features
+            </h2>
+            <div class="features-grid">
+                <div class="feature-item">
+                    <div class="feature-icon">🔄</div>
+                    <div class="feature-title">Single Sign-On</div>
+                    <div class="feature-desc">Centralized authentication across all platform modules and integrated systems</div>
+                </div>
+
+                <div class="feature-item">
+                    <div class="feature-icon">📊</div>
+                    <div class="feature-title">Access Analytics</div>
+                    <div class="feature-desc">Real-time monitoring of user activities and permission usage patterns</div>
+                </div>
+
+                <div class="feature-item">
+                    <div class="feature-icon">🔐</div>
+                    <div class="feature-title">Advanced Security</div>
+                    <div class="feature-desc">Encryption, IP whitelisting, device management, and threat detection</div>
+                </div>
+
+                <div class="feature-item">
+                    <div class="feature-icon">📱</div>
+                    <div class="feature-title">Mobile Support</div>
+                    <div class="feature-desc">Secure authentication on mobile apps with biometric support</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- System Status -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">📈</span>
+                System Status
+            </h2>
+            <div class="status-boxes">
+                <div class="status-box">
+                    <div class="status-label">Active Users</div>
+                    <div class="status-value">2,847</div>
+                </div>
+                <div class="status-box">
+                    <div class="status-label">System Uptime</div>
+                    <div class="status-value">99.9%</div>
+                </div>
+                <div class="status-box">
+                    <div class="status-label">Auth Requests/min</div>
+                    <div class="status-value">5,432</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Actions -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">▶️</span>
+                Next Steps
+            </h2>
+            <p style="color: var(--text-secondary); margin-bottom: 24px;">Complete your foundation setup to access advanced ITSM capabilities:</p>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <a href="#" class="button">View Dashboard</a>
+                <a href="#" class="button button-secondary">Configure RBAC</a>
+                <a href="#" class="button button-secondary">User Settings</a>
+                <a href="#" class="button button-secondary">Documentation</a>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>ITSMPro Part 1 - Foundation & Auth | <strong>Part 1 of 7</strong> | Enterprise IT Service Management Platform</p>
+            <p style="margin-top: 8px; opacity: 0.6;">© 2024 ITSMPro. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
