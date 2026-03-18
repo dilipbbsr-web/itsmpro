@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ITSMPro - Part 2: Employee & IMAC</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-dark: #0f1d2d;
+            --secondary-dark: #1a2f42;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --text-primary: #e0e7ff;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, #1a2f42 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 60px;
+            animation: slideDown 0.8s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .logo-icon {
+            font-size: 32px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .logo-text {
+            background: linear-gradient(135deg, #3b82f6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .breadcrumb {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .nav-button {
+            padding: 8px 16px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            font-size: 13px;
+        }
+
+        .nav-button:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+
+        .section {
+            margin-bottom: 80px;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-primary);
+        }
+
+        .section-icon {
+            font-size: 28px;
+            color: var(--accent-blue);
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: linear-gradient(135deg, rgba(26, 47, 66, 0.8) 0%, rgba(30, 58, 80, 0.8) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
+            position: relative;
+            overflow: hidden;
+            animation: fadeInUp 0.6s ease-out both;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .cards-grid > .card:nth-child(1) { animation-delay: 0.1s; }
+        .cards-grid > .card:nth-child(2) { animation-delay: 0.2s; }
+        .cards-grid > .card:nth-child(3) { animation-delay: 0.3s; }
+        .cards-grid > .card:nth-child(4) { animation-delay: 0.4s; }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .card:hover {
+            border-color: var(--accent-blue);
+            background: linear-gradient(135deg, rgba(26, 47, 66, 1) 0%, rgba(30, 58, 80, 1) 100%);
+            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2);
+            transform: translateY(-8px);
+        }
+
+        .card:hover::before {
+            left: 100%;
+        }
+
+        .card-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            display: block;
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover .card-icon {
+            transform: scale(1.1) rotate(5deg);
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .card-description {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .card-tag {
+            display: inline-block;
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--accent-blue);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .workflow-section {
+            background: rgba(26, 47, 66, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 40px 0;
+        }
+
+        .workflow-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .workflow-step {
+            text-align: center;
+            padding: 20px;
+            background: rgba(26, 47, 66, 0.6);
+            border-radius: 8px;
+            border-left: 4px solid var(--accent-blue);
+            animation: slideInUp 0.6s ease-out backwards;
+        }
+
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .workflow-step:nth-child(1) { animation-delay: 0.1s; }
+        .workflow-step:nth-child(2) { animation-delay: 0.2s; border-left-color: var(--accent-cyan); }
+        .workflow-step:nth-child(3) { animation-delay: 0.3s; border-left-color: #10b981; }
+        .workflow-step:nth-child(4) { animation-delay: 0.4s; border-left-color: #f59e0b; }
+
+        .step-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        .step-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .step-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 30px;
+        }
+
+        .metric-box {
+            background: rgba(26, 47, 66, 0.6);
+            border-left: 4px solid var(--accent-blue);
+            padding: 16px;
+            border-radius: 8px;
+            animation: slideInRight 0.6s ease-out backwards;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .metric-box:nth-child(2) { 
+            border-left-color: var(--accent-cyan);
+            animation-delay: 0.1s;
+        }
+        .metric-box:nth-child(3) { 
+            border-left-color: #10b981;
+            animation-delay: 0.2s;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .metric-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);
+        }
+
+        .footer {
+            text-align: center;
+            padding-top: 40px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 12px;
+            margin-top: 60px;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 20px;
+                text-align: center;
+                margin-bottom: 40px;
+            }
+
+            .cards-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .workflow-steps {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <div class="logo">
+                    <span class="logo-icon">⚡</span>
+                    <span class="logo-text">ITSMPro</span>
+                </div>
+                <div class="breadcrumb">Enterprise IT Service Management → Part 2: Employee & IMAC</div>
+            </div>
+            <a href="index.html" class="nav-button">← Back to Modules</a>
+        </div>
+
+        <!-- Employee Management -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">👥</span>
+                Employee Lifecycle Management
+            </h2>
+            <div class="cards-grid">
+                <div class="card">
+                    <span class="card-icon">📋</span>
+                    <h3 class="card-title">Employee Directory</h3>
+                    <p class="card-description">Centralized employee database with organizational hierarchy, roles, and contact information.</p>
+                    <span class="card-tag">Directory</span>
+                </div>
+
+                <div class="card">
+                    <span class="card-icon">🏢</span>
+                    <h3 class="card-title">Organization Chart</h3>
+                    <p class="card-description">Visual org chart with real-time updates, reporting lines, and department structures.</p>
+                    <span class="card-tag">Hierarchy</span>
+                </div>
+
+                <div class="card">
+                    <span class="card-icon">🔄</span>
+                    <h3 class="card-title">Onboarding</h3>
+                    <p class="card-description">Automated onboarding workflows with task checklists and training assignments.</p>
+                    <span class="card-tag">Workflow</span>
+                </div>
+
+                <div class="card">
+                    <span class="card-icon">👋</span>
+                    <h3 class="card-title">Offboarding</h3>
+                    <p class="card-description">Structured exit process with access revocation and asset recovery workflows.</p>
+                    <span class="card-tag">Offboarding</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- IMAC Workflow -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">⚙️</span>
+                IMAC (Provision, Move, Add, Change)
+            </h2>
+            <div class="workflow-section">
+                <div class="workflow-steps">
+                    <div class="workflow-step">
+                        <div class="step-icon">🆕</div>
+                        <div class="step-title">Provision (I)</div>
+                        <div class="step-desc">New employee IT asset setup and account creation</div>
+                    </div>
+
+                    <div class="workflow-step">
+                        <div class="step-icon">📍</div>
+                        <div class="step-title">Move (M)</div>
+                        <div class="step-desc">Relocation and workspace reconfiguration</div>
+                    </div>
+
+                    <div class="workflow-step">
+                        <div class="step-icon">➕</div>
+                        <div class="step-title">Add (A)</div>
+                        <div class="step-desc">Additional resources and access provisioning</div>
+                    </div>
+
+                    <div class="workflow-step">
+                        <div class="step-icon">🔧</div>
+                        <div class="step-title">Change (C)</div>
+                        <div class="step-desc">Configuration updates and modifications</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Approval Workflows -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">✅</span>
+                Approval Management
+            </h2>
+            <div class="cards-grid">
+                <div class="card">
+                    <span class="card-icon">👨‍💼</span>
+                    <h3 class="card-title">Manager Approvals</h3>
+                    <p class="card-description">Multi-level approval workflows with manager sign-off and delegation options.</p>
+                    <span class="card-tag">Authorization</span>
+                </div>
+
+                <div class="card">
+                    <span class="card-icon">📧</span>
+                    <h3 class="card-title">Email Notifications</h3>
+                    <p class="card-description">Automated approval requests and escalation alerts for time-sensitive decisions.</p>
+                    <span class="card-tag">Notifications</span>
+                </div>
+
+                <div class="card">
+                    <span class="card-icon">⏱️</span>
+                    <h3 class="card-title">SLA Compliance</h3>
+                    <p class="card-description">Approval deadline tracking and breach alerts for regulatory compliance.</p>
+                    <span class="card-tag">Compliance</span>
+                </div>
+
+                <div class="card">
+                    <span class="card-icon">📊</span>
+                    <h3 class="card-title">Approval Analytics</h3>
+                    <p class="card-description">Reports on approval cycles, bottlenecks, and process efficiency metrics.</p>
+                    <span class="card-tag">Analytics</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Key Metrics -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">📈</span>
+                Performance Metrics
+            </h2>
+            <div class="metrics-grid">
+                <div class="metric-box">
+                    <div class="metric-label">Onboarding Time</div>
+                    <div class="metric-value">3.2 days</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Approval Cycle</div>
+                    <div class="metric-value">2.1 days</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Process Compliance</div>
+                    <div class="metric-value">98.5%</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Action Section -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">▶️</span>
+                Get Started
+            </h2>
+            <p style="color: var(--text-secondary); margin-bottom: 24px;">Configure your employee management and IMAC workflows:</p>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <a href="#" class="button">Configure IMAC Process</a>
+                <a href="#" class="button" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary);">View Workflows</a>
+                <a href="#" class="button" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary);">Training Guide</a>
+            </div>
+        </section>
+
+        <div class="footer">
+            <p>ITSMPro Part 2 - Employee & IMAC | <strong>Part 2 of 7</strong> | Enterprise IT Service Management Platform</p>
+            <p style="margin-top: 8px; opacity: 0.6;">© 2024 ITSMPro. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

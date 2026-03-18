@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ITSMPro - Part 6: Knowledge Base & SLA</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-dark: #0f1d2d;
+            --secondary-dark: #1a2f42;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --text-primary: #e0e7ff;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, #1a2f42 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 60px;
+            animation: slideDown 0.8s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .logo-icon {
+            font-size: 32px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .logo-text {
+            background: linear-gradient(135deg, #3b82f6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .breadcrumb {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .nav-button {
+            padding: 8px 16px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            font-size: 13px;
+        }
+
+        .nav-button:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+
+        .section {
+            margin-bottom: 80px;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-primary);
+        }
+
+        .section-icon {
+            font-size: 28px;
+            color: var(--accent-blue);
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: linear-gradient(135deg, rgba(26, 47, 66, 0.8) 0%, rgba(30, 58, 80, 0.8) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
+            position: relative;
+            overflow: hidden;
+            animation: fadeInUp 0.6s ease-out both;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .cards-grid > .card:nth-child(1) { animation-delay: 0.1s; }
+        .cards-grid > .card:nth-child(2) { animation-delay: 0.2s; }
+        .cards-grid > .card:nth-child(3) { animation-delay: 0.3s; }
+        .cards-grid > .card:nth-child(4) { animation-delay: 0.4s; }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .card:hover {
+            border-color: var(--accent-blue);
+            background: linear-gradient(135deg, rgba(26, 47, 66, 1) 0%, rgba(30, 58, 80, 1) 100%);
+            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2);
+            transform: translateY(-8px);
+        }
+
+        .card:hover::before {
+            left: 100%;
+        }
+
+        .card-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            display: block;
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover .card-icon {
+            transform: scale(1.1) rotate(5deg);
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .card-description {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .card-tag {
+            display: inline-block;
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--accent-blue);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .kb-structure {
+            background: rgba(26, 47, 66, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 40px 0;
+        }
+
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+
+        .category-box {
+            background: rgba(26, 47, 66, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            animation: slideInUp 0.6s ease-out backwards;
+        }
+
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .category-box:nth-child(1) { animation-delay: 0.1s; }
+        .category-box:nth-child(2) { animation-delay: 0.2s; }
+        .category-box:nth-child(3) { animation-delay: 0.3s; }
+        .category-box:nth-child(4) { animation-delay: 0.4s; }
+
+        .category-box:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(6, 182, 212, 0.1);
+        }
+
+        .category-icon {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .category-name {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .category-count {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .sla-framework {
+            background: rgba(26, 47, 66, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 40px 0;
+        }
+
+        .sla-tiers {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .sla-tier {
+            background: rgba(26, 47, 66, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            animation: fadeIn 0.8s ease-out backwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .sla-tier:nth-child(1) { animation-delay: 0.2s; }
+        .sla-tier:nth-child(2) { animation-delay: 0.3s; }
+        .sla-tier:nth-child(3) { animation-delay: 0.4s; }
+
+        .tier-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .tier-name {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .tier-details {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .escalation-section {
+            background: rgba(26, 47, 66, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 40px 0;
+        }
+
+        .escalation-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+
+        .escalation-step {
+            background: rgba(26, 47, 66, 0.6);
+            border-left: 4px solid var(--accent-blue);
+            border-radius: 8px;
+            padding: 16px;
+            animation: slideInRight 0.6s ease-out backwards;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .escalation-step:nth-child(2) { 
+            border-left-color: var(--accent-cyan);
+            animation-delay: 0.1s;
+        }
+        .escalation-step:nth-child(3) { 
+            border-left-color: #10b981;
+            animation-delay: 0.2s;
+        }
+
+        .step-level {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .step-action {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 30px;
+        }
+
+        .metric-box {
+            background: rgba(26, 47, 66, 0.6);
+            border-left: 4px solid var(--accent-blue);
+            padding: 16px;
+            border-radius: 8px;
+            animation: slideInRight 0.6s ease-out backwards;
+        }
+
+        .metric-box:nth-child(2) { 
+            border-left-color: var(--accent-cyan);
+            animation-delay: 0.1s;
+        }
+        .metric-box:nth-child(3) { 
+            border-left-color: #10b981;
+            animation-delay: 0.2s;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .metric-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);
+        }
+
+        .footer {
+            text-align: center;
+            padding-top: 40px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 12px;
+            margin-top: 60px;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 20px;
+                text-align: center;
+                margin-bottom: 40px;
+            }
+
+            .cards-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .category-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <div class="logo">
+                    <span class="logo-icon">⚡</span>
+                    <span class="logo-text">ITSMPro</span>
+                </div>
+                <div class="breadcrumb">Enterprise IT Service Management → Part 6: Knowledge Base & SLA</div>
+            </div>
+            <a href="index.html" class="nav-button">← Back to Modules</a>
+        </div>
+
+        <!-- Knowledge Base -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">📖</span>
+                Knowledge Base Management
+            </h2>
+            <div class="cards-grid">
+                <div class="card">
+                    <span class="card-icon">✍️</span>
+                    <h3 class="card-title">Article Creation</h3>
+                    <p class="card-description">Rich text editor for creating comprehensive knowledge articles with multimedia support.</p>
+                    <span class="card-tag">Content</span>
+                </div>
+
+                <div class="card">
+                    <span class="card-icon">🔍</span>
+                    <h3 class="card-title">Smart Search</h3>
+                    <p class="card-description">AI-powered search with suggestions and relevance ranking.</p>
+                    <span class="card-tag">Search</span>
+                </div>
+
+                <div class="card">
+                    <span class="card-icon">⭐</span>
+                    <h3 class="card-title">Rating & Feedback</h3>
+                    <p class="card-description">User ratings and feedback to improve article quality and relevance.</p>
+                    <span class="card-tag">Quality</span>
+                </div>
+
+                <div class="card">
+                    <span class="card-icon">📊</span>
+                    <h3 class="card-title">Analytics</h3>
+                    <p class="card-description">Track article views, usage patterns, and search effectiveness.</p>
+                    <span class="card-tag">Metrics</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- KB Structure -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">🗂️</span>
+                Knowledge Categories
+            </h2>
+            <div class="kb-structure">
+                <div class="category-grid">
+                    <div class="category-box">
+                        <div class="category-icon">💻</div>
+                        <div class="category-name">Hardware</div>
+                        <div class="category-count">324 articles</div>
+                    </div>
+                    <div class="category-box">
+                        <div class="category-icon">🔧</div>
+                        <div class="category-name">Software</div>
+                        <div class="category-count">486 articles</div>
+                    </div>
+                    <div class="category-box">
+                        <div class="category-icon">🌐</div>
+                        <div class="category-name">Network</div>
+                        <div class="category-count">215 articles</div>
+                    </div>
+                    <div class="category-box">
+                        <div class="category-icon">❓</div>
+                        <div class="category-name">FAQs</div>
+                        <div class="category-count">142 articles</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLA Framework -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">📋</span>
+                SLA Management
+            </h2>
+            <div class="sla-framework">
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">Define and manage Service Level Agreements for all services:</p>
+                <div class="sla-tiers">
+                    <div class="sla-tier">
+                        <div class="tier-icon">🥇</div>
+                        <div class="tier-name">Premium</div>
+                        <div class="tier-details">
+                            <strong>Response:</strong> 1 hour<br>
+                            <strong>Resolution:</strong> 4 hours<br>
+                            <strong>Availability:</strong> 99.9%
+                        </div>
+                    </div>
+                    <div class="sla-tier">
+                        <div class="tier-icon">🥈</div>
+                        <div class="tier-name">Standard</div>
+                        <div class="tier-details">
+                            <strong>Response:</strong> 4 hours<br>
+                            <strong>Resolution:</strong> 24 hours<br>
+                            <strong>Availability:</strong> 99.5%
+                        </div>
+                    </div>
+                    <div class="sla-tier">
+                        <div class="tier-icon">🥉</div>
+                        <div class="tier-name">Basic</div>
+                        <div class="tier-details">
+                            <strong>Response:</strong> 8 hours<br>
+                            <strong>Resolution:</strong> 48 hours<br>
+                            <strong>Availability:</strong> 99%
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Escalation Policies -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">⚠️</span>
+                Escalation Policies
+            </h2>
+            <div class="escalation-section">
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">Automated escalation rules based on priority and SLA breach:</p>
+                <div class="escalation-steps">
+                    <div class="escalation-step">
+                        <div class="step-level">Level 1</div>
+                        <div class="step-action">Support Team</div>
+                    </div>
+                    <div class="escalation-step">
+                        <div class="step-level">Level 2</div>
+                        <div class="step-action">Technical Manager</div>
+                    </div>
+                    <div class="escalation-step">
+                        <div class="step-level">Level 3</div>
+                        <div class="step-action">Executive</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Key Metrics -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">📈</span>
+                Performance Metrics
+            </h2>
+            <div class="metrics-grid">
+                <div class="metric-box">
+                    <div class="metric-label">KB Articles</div>
+                    <div class="metric-value">1,167</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">SLA Compliance</div>
+                    <div class="metric-value">97.8%</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Self-Service Rate</div>
+                    <div class="metric-value">42.5%</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Action Section -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-icon">▶️</span>
+                Get Started
+            </h2>
+            <p style="color: var(--text-secondary); margin-bottom: 24px;">Build your knowledge base and establish SLA policies:</p>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <a href="#" class="button">Create KB Articles</a>
+                <a href="#" class="button" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary);">Define SLAs</a>
+                <a href="#" class="button" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary);">Setup Escalations</a>
+            </div>
+        </section>
+
+        <div class="footer">
+            <p>ITSMPro Part 6 - Knowledge Base & SLA | <strong>Part 6 of 7</strong> | Enterprise IT Service Management Platform</p>
+            <p style="margin-top: 8px; opacity: 0.6;">© 2024 ITSMPro. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
