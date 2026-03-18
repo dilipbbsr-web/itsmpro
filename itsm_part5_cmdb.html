@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ITSM Pro — Part 5: Asset & Configuration Management (CMDB)</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;background:#F0F4F8;overflow-x:hidden}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:3px}
+input,select,textarea{font-family:inherit}
+@keyframes slideUp{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes slideIn{from{transform:translateX(16px);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useMemo,useRef,useCallback}=React;
+
+// ══════════════════════════════════════════════════════════════
+// ITSM PRO — Part 5: Asset & Configuration Management (CMDB)
+// ══════════════════════════════════════════════════════════════
+
+const C={
+  sb:'#0D1B2A',sbBorder:'rgba(255,255,255,0.07)',sbText:'#8899AA',
+  sbActive:'rgba(59,130,246,0.12)',sbActiveTxt:'#93C5FD',sbHover:'rgba(255,255,255,0.04)',
+  primary:'#2563EB',primaryH:'#1D4ED8',primaryLt:'#EFF6FF',
+  success:'#059669',successLt:'#ECFDF5',
+  warning:'#D97706',warningLt:'#FFFBEB',
+  danger:'#DC2626',dangerLt:'#FEF2F2',
+  purple:'#7C3AED',purpleLt:'#F5F3FF',
+  cyan:'#0891B2',cyanLt:'#ECFEFF',
+  orange:'#EA580C',orangeLt:'#FFF7ED',
+  teal:'#0D9488',tealLt:'#F0FDFA',
+  indigo:'#4F46E5',indigoLt:'#EEF2FF',
+  bg:'#F0F4F8',card:'#FFFFFF',border:'#E2E8F0',borderFaint:'#F1F5F9',
+  t1:'#0F172A',t2:'#475569',t3:'#94A3B8',
+};
+
+const ROLE_META={
+  SUPER_ADMIN:{label:'Super Admin',color:'#7C3AED',bg:'#F5F3FF',border:'#DDD6FE'},
+  ADMIN:{label:'Admin',color:'#2563EB',bg:'#EFF6FF',border:'#BFDBFE'},
+  EMPLOYEE:{label:'Employee',color:'#059669',bg:'#ECFDF5',border:'#A7F3D0'},
+  HELPDESK:{label:'Helpdesk',color:'#D97706',bg:'#FFFBEB',border:'#FDE68A'},
+  AGENT:{label:'Agent',color:'#0891B2',bg:'#ECFEFF',border:'#A5F3FC'},
+  SERVICE_MANAGER:{label:'Service Mgr',color:'#DC2626',bg:'#FEF2F2',border:'#FECACA'},
+};
+
+// CI Types config — icon, color, fields
+const CI_TYPES={
+  Laptop:{icon:'💻',color:C.primary,fields:['Make','Model','Serial Number','CPU','RAM','Storage','OS','OS Version','Asset Tag','Purchase Date','Warranty Expiry','Vendor'],cat:'Hardware'},
+  Desktop:{icon:'🖥️',color:C.cyan,fields:['Make','Model','Serial Number','CPU','RAM','Storage','OS','OS Version','Asset Tag','Purchase Date','Warranty Expiry','Location','Vendor'],cat:'Hardware'},
+  Server:{icon:'🗄️',color:C.indigo,fields:['Hostname','IP Address','Make','Model','Serial Number','CPU Cores','RAM','Storage','OS','OS Version','Role','Environment','Rack Location','Data Center'],cat:'Server'},
+  'Network Switch':{icon:'🔀',color:C.teal,fields:['Hostname','IP Address','Make','Model','Serial Number','Ports','Firmware Version','Location','VLAN Config','Rack Location'],cat:'Network'},
+  Router:{icon:'📡',color:C.teal,fields:['Hostname','IP Address','Make','Model','Serial Number','Firmware Version','WAN IP','Location'],cat:'Network'},
+  Firewall:{icon:'🛡️',color:C.danger,fields:['Hostname','IP Address','Make','Model','Serial Number','Firmware Version','Policy Version','HA Status'],cat:'Network'},
+  'Mobile Device':{icon:'📱',color:C.orange,fields:['Make','Model','Serial Number','IMEI','OS','OS Version','Asset Tag','Assigned User','SIM Card','Purchase Date'],cat:'Hardware'},
+  Printer:{icon:'🖨️',color:'#6366F1',fields:['Make','Model','Serial Number','IP Address','Asset Tag','Location','Department','Toner Level'],cat:'Hardware'},
+  'Software License':{icon:'📄',color:C.purple,fields:['Software Name','Vendor','Version','License Type','License Count','Seats Used','License Key','Purchase Date','Expiry Date','Cost (USD)'],cat:'Software'},
+  'Virtual Machine':{icon:'☁️',color:C.indigo,fields:['VM Name','Hostname','IP Address','vCPUs','RAM','Storage','OS','OS Version','Hypervisor','Host Server','Environment','Snapshot Policy'],cat:'Server'},
+  'Cloud Instance':{icon:'🌐',color:C.cyan,fields:['Instance ID','Cloud Provider','Region','Instance Type','OS','IP Address','VPC','Security Group','Environment','Monthly Cost (USD)'],cat:'Cloud'},
+  Database:{icon:'🗃️',color:C.warning,fields:['Database Name','DBMS','Version','Server/Host','Port','Size (GB)','Backup Schedule','RPO','RTO','Environment'],cat:'Application'},
+};
+
+const CI_STATUSES=['Active','Inactive','In Repair','Retired','In Transit','Reserved','Disposed','Lost/Stolen'];
+const CI_ENVIRONMENTS=['Production','Staging','Development','Test','UAT','DR','Lab'];
+const LOCATIONS=['HQ - New York','Branch A - Chicago','Branch B - LA','Branch C - Dallas','Remote','Data Center - NY','Data Center - Chicago','Cloud - AWS','Cloud - Azure','Cloud - GCP'];
+const DEPARTMENTS=['IT','Finance','HR','Operations','Sales','Marketing','Legal','Engineering'];
+
+const REL_TYPES=['Runs On','Hosted On','Connected To','Depends On','Managed By','Backed Up By','Monitored By','Virtualizes','Part Of','Linked To'];
+
+const now=()=>new Date().toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const today=()=>new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const daysAgo=d=>new Date(Date.now()-d*86400000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const daysFrom=d=>new Date(Date.now()+d*86400000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const genId=pfx=>pfx+'-'+String(Date.now()).slice(-5)+Math.random().toString(36).substr(2,3).toUpperCase();
+const initials=n=>(n||'U').split(' ').map(w=>w[0]||'').join('').toUpperCase().substr(0,2);
+const avatarColor=str=>{const cols=['#2563EB','#7C3AED','#059669','#D97706','#DC2626','#0891B2','#9333EA','#C026D3'];let h=0;for(let c of(str||''))h=c.charCodeAt(0)+h*31;return cols[Math.abs(h)%cols.length];};
+
+const USERS=[
+  {id:'u1',name:'Alex Morgan',email:'superadmin@itsm.com',pw:'Admin@123',role:'SUPER_ADMIN',dept:'IT',title:'CIO'},
+  {id:'u2',name:'Sarah Chen',email:'admin@itsm.com',pw:'Admin@123',role:'ADMIN',dept:'IT',title:'IT Manager'},
+  {id:'u3',name:'James Wilson',email:'employee@company.com',pw:'Employee@123',role:'EMPLOYEE',dept:'Finance',title:'Finance Analyst'},
+  {id:'u4',name:'Priya Sharma',email:'helpdesk@company.com',pw:'Helpdesk@123',role:'HELPDESK',dept:'IT',title:'Help Desk Analyst'},
+  {id:'u5',name:'David Lee',email:'agent@company.com',pw:'Agent@123',role:'AGENT',dept:'IT',title:'IT Support Specialist'},
+  {id:'u6',name:'Maria Garcia',email:'manager@company.com',pw:'Manager@123',role:'SERVICE_MANAGER',dept:'IT',title:'IT Service Manager'},
+  {id:'u7',name:'Robert Kim',email:'rkim@company.com',pw:'Pass@123',role:'EMPLOYEE',dept:'Finance',title:'Finance Manager'},
+  {id:'u8',name:'Emily Brown',email:'ebrown@company.com',pw:'Pass@123',role:'AGENT',dept:'IT',title:'Network Engineer'},
+  {id:'u10',name:'Lisa Zhang',email:'lzhang@company.com',pw:'Pass@123',role:'EMPLOYEE',dept:'Engineering',title:'Software Engineer'},
+  {id:'u11',name:'Mark Turner',email:'mturner@company.com',pw:'Pass@123',role:'AGENT',dept:'IT',title:'Systems Engineer'},
+];
+
+// ─── SEED CMDB ────────────────────────────────────
+const SEED_CIS=[
+  {id:'CI-00001',name:'PROD-DB-01',type:'Server',status:'Active',env:'Production',location:'Data Center - NY',dept:'IT',assignedTo:'u11',managedBy:'u11',purchaseDate:daysAgo(730),warrantyExpiry:daysFrom(365),lastSeen:now(),tags:['database','production','critical'],fields:{'Hostname':'PROD-DB-01','IP Address':'10.10.1.10','Make':'Dell','Model':'PowerEdge R750','Serial Number':'SVC-8821-DDX','CPU Cores':'32','RAM':'256 GB','Storage':'8 TB NVMe','OS':'Windows Server 2022','OS Version':'21H2','Role':'Primary Database Server','Environment':'Production','Rack Location':'Rack-A3-U14','Data Center':'DC-NY-01'},relationships:[{targetId:'CI-00002',type:'Runs On',direction:'out'},{targetId:'CI-00008',type:'Backed Up By',direction:'out'},{targetId:'CI-00007',type:'Monitored By',direction:'out'}],incidents:['INC-00005'],changes:['CHG-00004'],problems:['PRB-00005'],notes:[],history:[{action:'Registered',by:'u11',at:daysAgo(730),note:'Initial CMDB entry'},{action:'RAM Upgraded',by:'u11',at:daysAgo(90),note:'Upgraded from 128GB to 256GB'}]},
+
+  {id:'CI-00002',name:'VMware ESXi Host-01',type:'Server',status:'Active',env:'Production',location:'Data Center - NY',dept:'IT',assignedTo:'u11',managedBy:'u11',purchaseDate:daysAgo(900),warrantyExpiry:daysFrom(180),lastSeen:now(),tags:['hypervisor','production','vmware'],fields:{'Hostname':'ESXI-HOST-01','IP Address':'10.10.1.5','Make':'HP','Model':'ProLiant DL580 G10','Serial Number':'CZJ9220123','CPU Cores':'64','RAM':'512 GB','Storage':'2 TB SSD','OS':'VMware ESXi','OS Version':'8.0 U2','Role':'Primary Hypervisor','Environment':'Production','Rack Location':'Rack-A2-U1','Data Center':'DC-NY-01'},relationships:[{targetId:'CI-00001',type:'Runs On',direction:'in'},{targetId:'CI-00003',type:'Runs On',direction:'in'},{targetId:'CI-00007',type:'Monitored By',direction:'out'}],incidents:[],changes:[],problems:[],notes:[],history:[{action:'Registered',by:'u11',at:daysAgo(900),note:'Initial entry'}]},
+
+  {id:'CI-00003',name:'APP-SRV-01',type:'Virtual Machine',status:'Active',env:'Production',location:'Data Center - NY',dept:'IT',assignedTo:'u11',managedBy:'u11',purchaseDate:daysAgo(400),warrantyExpiry:null,lastSeen:now(),tags:['application','production','vm'],fields:{'VM Name':'APP-SRV-01','Hostname':'app-srv-01.company.com','IP Address':'10.10.2.20','vCPUs':'8','RAM':'32 GB','Storage':'500 GB','OS':'Ubuntu Server','OS Version':'22.04 LTS','Hypervisor':'VMware ESXi 8.0','Host Server':'ESXI-HOST-01','Environment':'Production','Snapshot Policy':'Daily'},relationships:[{targetId:'CI-00002',type:'Hosted On',direction:'out'},{targetId:'CI-00001',type:'Depends On',direction:'out'},{targetId:'CI-00009',type:'Connected To',direction:'out'}],incidents:[],changes:[],problems:[],notes:[],history:[{action:'Provisioned',by:'u11',at:daysAgo(400),note:'VM provisioned for application hosting'}]},
+
+  {id:'CI-00004',name:'FW-CORE-01',type:'Firewall',status:'Active',env:'Production',location:'Data Center - NY',dept:'IT',assignedTo:'u8',managedBy:'u8',purchaseDate:daysAgo(540),warrantyExpiry:daysFrom(200),lastSeen:now(),tags:['firewall','network','critical','security'],fields:{'Hostname':'fw-core-01.company.com','IP Address':'203.0.113.1','Make':'Palo Alto','Model':'PA-5260','Serial Number':'PA-SER-884421','Firmware Version':'11.1.2','Policy Version':'v45','HA Status':'Active-Passive'},relationships:[{targetId:'CI-00005',type:'Connected To',direction:'out'},{targetId:'CI-00009',type:'Connected To',direction:'out'}],incidents:['INC-00007'],changes:['CHG-00001'],problems:[],notes:[{id:'n1',text:'Firewall policy v45 pushed after CHG-00001',by:'u8',at:daysAgo(2)}],history:[{action:'Registered',by:'u8',at:daysAgo(540),note:''},{action:'Firmware Updated',by:'u8',at:daysAgo(60),note:'Updated to 11.1.2'}]},
+
+  {id:'CI-00005',name:'SW-CORE-01',type:'Network Switch',status:'Active',env:'Production',location:'Data Center - NY',dept:'IT',assignedTo:'u8',managedBy:'u8',purchaseDate:daysAgo(720),warrantyExpiry:daysFrom(80),lastSeen:now(),tags:['network','core','switch'],fields:{'Hostname':'sw-core-01','IP Address':'10.10.0.1','Make':'Cisco','Model':'Catalyst 9500','Serial Number':'CSC-9500-4421','Ports':'48x10G + 8x40G','Firmware Version':'17.9.3a','Location':'DC-NY Rack-B1','VLAN Config':'VLAN 10,20,30,40,100'},relationships:[{targetId:'CI-00004',type:'Connected To',direction:'in'},{targetId:'CI-00006',type:'Connected To',direction:'out'}],incidents:[],changes:[],problems:['PRB-00002'],notes:[],history:[{action:'Registered',by:'u8',at:daysAgo(720),note:''}]},
+
+  {id:'CI-00006',name:'SW-ACCESS-FL2',type:'Network Switch',status:'Active',env:'Production',location:'HQ - New York',dept:'IT',assignedTo:'u8',managedBy:'u8',purchaseDate:daysAgo(600),warrantyExpiry:daysFrom(600),lastSeen:now(),tags:['network','access','floor2'],fields:{'Hostname':'sw-access-fl2','IP Address':'10.10.0.10','Make':'Cisco','Model':'Catalyst 9200','Serial Number':'CSC-9200-FL2','Ports':'24x1G','Firmware Version':'17.9.2','Location':'Floor 2 IDF','VLAN Config':'VLAN 10,20'},relationships:[{targetId:'CI-00005',type:'Connected To',direction:'in'}],incidents:['INC-00008'],changes:[],problems:['PRB-00004'],notes:[],history:[{action:'Registered',by:'u8',at:daysAgo(600),note:''}]},
+
+  {id:'CI-00007',name:'Zabbix Monitor Server',type:'Server',status:'Active',env:'Production',location:'Data Center - NY',dept:'IT',assignedTo:'u11',managedBy:'u11',purchaseDate:daysAgo(500),warrantyExpiry:daysFrom(400),lastSeen:now(),tags:['monitoring','zabbix'],fields:{'Hostname':'monitor-01.company.com','IP Address':'10.10.1.50','Make':'Dell','Model':'PowerEdge R450','Serial Number':'SVC-4412-MON','CPU Cores':'16','RAM':'64 GB','Storage':'2 TB','OS':'CentOS Stream','OS Version':'9','Role':'Network & Server Monitoring','Environment':'Production','Rack Location':'Rack-C1','Data Center':'DC-NY-01'},relationships:[{targetId:'CI-00001',type:'Monitors',direction:'out'},{targetId:'CI-00002',type:'Monitors',direction:'out'},{targetId:'CI-00005',type:'Monitors',direction:'out'}],incidents:[],changes:[],problems:[],notes:[],history:[{action:'Registered',by:'u11',at:daysAgo(500),note:'Monitoring server setup'}]},
+
+  {id:'CI-00008',name:'Veeam Backup Server',type:'Server',status:'Active',env:'Production',location:'Data Center - Chicago',dept:'IT',assignedTo:'u11',managedBy:'u11',purchaseDate:daysAgo(400),warrantyExpiry:daysFrom(500),lastSeen:now(),tags:['backup','veeam','dr'],fields:{'Hostname':'backup-01.company.com','IP Address':'10.20.1.100','Make':'HP','Model':'ProLiant DL380 G10','Serial Number':'CZJ1234567','CPU Cores':'16','RAM':'64 GB','Storage':'50 TB','OS':'Windows Server 2022','OS Version':'21H2','Role':'Backup & Replication Server','Environment':'Production','Rack Location':'Rack-A1','Data Center':'DC-CHI-01'},relationships:[{targetId:'CI-00001',type:'Backs Up',direction:'out'},{targetId:'CI-00003',type:'Backs Up',direction:'out'}],incidents:[],changes:[],problems:[],notes:[],history:[{action:'Registered',by:'u11',at:daysAgo(400),note:''}]},
+
+  {id:'CI-00009',name:'DMZ Switch',type:'Network Switch',status:'Active',env:'Production',location:'Data Center - NY',dept:'IT',assignedTo:'u8',managedBy:'u8',purchaseDate:daysAgo(600),warrantyExpiry:daysFrom(200),lastSeen:now(),tags:['network','dmz'],fields:{'Hostname':'sw-dmz-01','IP Address':'10.100.0.1','Make':'Cisco','Model':'Catalyst 9300','Serial Number':'CSC-9300-DMZ','Ports':'24x1G + 4x10G','Firmware Version':'17.9.3','Location':'DC-NY DMZ Rack','VLAN Config':'VLAN 200,201'},relationships:[{targetId:'CI-00004',type:'Connected To',direction:'in'},{targetId:'CI-00003',type:'Connected To',direction:'in'}],incidents:[],changes:['CHG-00001'],problems:[],notes:[],history:[]},
+
+  {id:'CI-00010',name:'JW-LT-001',type:'Laptop',status:'Active',env:'Production',location:'Branch A - Chicago',dept:'Finance',assignedTo:'u3',managedBy:'u5',purchaseDate:daysAgo(365),warrantyExpiry:daysFrom(730),lastSeen:now(),tags:['laptop','finance','user-device'],fields:{'Make':'Dell','Model':'Latitude 5540','Serial Number':'DLLT-5540-JW01','CPU':'Intel Core i7-1365U','RAM':'16 GB','Storage':'512 GB NVMe','OS':'Windows 11 Pro','OS Version':'23H2','Asset Tag':'AST-F-0042','Purchase Date':daysAgo(365),'Warranty Expiry':daysFrom(730),'Vendor':'Dell Technologies'},relationships:[],incidents:['INC-00004'],changes:[],problems:['PRB-00003'],notes:[{id:'n2',text:'User reports overheating after KB5034439 update. Workaround applied (KB uninstalled).',by:'u5',at:daysAgo(3)}],history:[{action:'Registered',by:'u5',at:daysAgo(365),note:'Assigned to James Wilson'},{action:'Incident Linked',by:'u5',at:daysAgo(3),note:'Overheating issue INC-00004'}]},
+
+  {id:'CI-00011',name:'Microsoft 365 E3',type:'Software License',status:'Active',env:'Production',location:'Cloud - Azure',dept:'IT',assignedTo:'u2',managedBy:'u2',purchaseDate:daysAgo(365),warrantyExpiry:daysFrom(0),lastSeen:today(),tags:['microsoft','o365','saas','license'],fields:{'Software Name':'Microsoft 365 E3','Vendor':'Microsoft','Version':'2025','License Type':'Subscription','License Count':'250','Seats Used':'198','License Key':'M365-E3-CORP-XXXXXXXX','Purchase Date':daysAgo(365),'Expiry Date':daysFrom(0),'Cost (USD)':'$11,880/yr'},relationships:[],incidents:[],changes:[],problems:[],notes:[{id:'n3',text:'License renewal due TODAY. 52 unused seats. Consider downgrading to E1 for non-power users.',by:'u2',at:today()}],history:[{action:'Purchased',by:'u2',at:daysAgo(365),note:'250 seat Microsoft 365 E3'},{action:'Expiry Alert',by:'System',at:today(),note:'License expires today - action required'}]},
+
+  {id:'CI-00012',name:'AWS Production Account',type:'Cloud Instance',status:'Active',env:'Production',location:'Cloud - AWS',dept:'IT',assignedTo:'u11',managedBy:'u1',purchaseDate:daysAgo(500),warrantyExpiry:null,lastSeen:now(),tags:['cloud','aws','production'],fields:{'Instance ID':'i-0a1b2c3d4e5f6789','Cloud Provider':'AWS','Region':'us-east-1','Instance Type':'r6i.4xlarge','OS':'Amazon Linux 2023','IP Address':'52.12.34.56','VPC':'vpc-prod-0001','Security Group':'sg-web-prod','Environment':'Production','Monthly Cost (USD)':'$892'},relationships:[{targetId:'CI-00001',type:'Linked To',direction:'out'}],incidents:[],changes:[],problems:[],notes:[],history:[{action:'Registered',by:'u11',at:daysAgo(500),note:'AWS production instance onboarded to CMDB'}]},
+
+  {id:'CI-00013',name:'Exchange Server 2019',type:'Server',status:'Active',env:'Production',location:'Data Center - NY',dept:'IT',assignedTo:'u5',managedBy:'u5',purchaseDate:daysAgo(800),warrantyExpiry:daysFrom(100),lastSeen:now(),tags:['exchange','email','production','critical'],fields:{'Hostname':'exchange-01.company.com','IP Address':'10.10.1.15','Make':'HP','Model':'ProLiant DL360 G10','Serial Number':'CZJ7654321','CPU Cores':'16','RAM':'128 GB','Storage':'4 TB SSD','OS':'Windows Server 2019','OS Version':'1809','Role':'Email Server (Exchange 2019)','Environment':'Production','Rack Location':'Rack-A1-U22','Data Center':'DC-NY-01'},relationships:[{targetId:'CI-00005',type:'Connected To',direction:'out'},{targetId:'CI-00008',type:'Backed Up By',direction:'out'}],incidents:['INC-00001'],changes:['CHG-00002'],problems:['PRB-00001'],notes:[{id:'n4',text:'SSL certificate renewed via CHG-00002. Monitoring for 72h.',by:'u5',at:daysAgo(2)}],history:[{action:'Registered',by:'u5',at:daysAgo(800),note:''},{action:'Emergency SSL Renewal',by:'u5',at:daysAgo(2),note:'CHG-00002 completed'}]},
+
+  {id:'CI-00014',name:'RK-DT-007',type:'Desktop',status:'In Repair',env:'Production',location:'Branch A - Chicago',dept:'Finance',assignedTo:'u7',managedBy:'u5',purchaseDate:daysAgo(1100),warrantyExpiry:daysAgo(100),lastSeen:daysAgo(7),tags:['desktop','finance','out-of-warranty'],fields:{'Make':'HP','Model':'EliteDesk 800 G6','Serial Number':'HPDT-800G6-RK07','CPU':'Intel Core i5-10500','RAM':'8 GB','Storage':'256 GB SSD','OS':'Windows 11 Pro','OS Version':'22H2','Asset Tag':'AST-F-0018','Purchase Date':daysAgo(1100),'Warranty Expiry':daysAgo(100),'Location':'Branch A - Chicago','Department':'Finance','Vendor':'HP Inc.'},relationships:[],incidents:[],changes:[],problems:[],notes:[{id:'n5',text:'Sent to vendor for motherboard replacement. Expected return 5 days.',by:'u5',at:daysAgo(7)}],history:[{action:'Status: In Repair',by:'u5',at:daysAgo(7),note:'Sent for motherboard replacement'}]},
+
+  {id:'CI-00015',name:'Adobe Creative Cloud',type:'Software License',status:'Active',env:'Production',location:'HQ - New York',dept:'Marketing',assignedTo:'u2',managedBy:'u2',purchaseDate:daysAgo(60),warrantyExpiry:daysFrom(305),lastSeen:today(),tags:['adobe','creative','license','software'],fields:{'Software Name':'Adobe Creative Cloud','Vendor':'Adobe','Version':'2025','License Type':'Named User','License Count':'10','Seats Used':'10','License Key':'ACC-CORP-XXXX-XXXX','Purchase Date':daysAgo(60),'Expiry Date':daysFrom(305),'Cost (USD)':'$6,600/yr'},relationships:[],incidents:[],changes:[],problems:[],notes:[],history:[{action:'Purchased',by:'u2',at:daysAgo(60),note:'10 seats for Marketing team'}]},
+];
+
+// Seed relationships as a flat array for the graph view
+const REL_DATA=SEED_CIS.flatMap(ci=>
+  (ci.relationships||[]).filter(r=>r.direction==='out').map(r=>({from:ci.id,to:r.targetId,type:r.type}))
+);
+
+// ─── UI ATOMS ─────────────────────────────────────
+const Avatar=({name='?',size=32,sx={}})=><div style={{width:size,height:size,borderRadius:'50%',background:avatarColor(name),display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:size*.34,fontWeight:700,flexShrink:0,...sx}}>{initials(name)}</div>;
+const RoleBadge=({role})=>{const m=ROLE_META[role];if(!m)return null;return <span style={{fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:20,border:`1px solid ${m.border}`,color:m.color,background:m.bg,whiteSpace:'nowrap',letterSpacing:'0.05em',textTransform:'uppercase'}}>{m.label}</span>;};
+const Tag=({label,color=C.primary,bg=C.primaryLt,onClick})=><span onClick={onClick} style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:20,color,background:bg,whiteSpace:'nowrap',cursor:onClick?'pointer':'default'}}>{label}</span>;
+
+const StatusBadge=({status})=>{
+  const m={'Active':{c:C.success,bg:C.successLt},'Inactive':{c:C.t3,bg:'#F1F5F9'},'In Repair':{c:C.warning,bg:C.warningLt},'Retired':{c:'#374151',bg:'#F9FAFB'},'In Transit':{c:C.cyan,bg:C.cyanLt},'Reserved':{c:C.purple,bg:C.purpleLt},'Disposed':{c:C.danger,bg:C.dangerLt},'Lost/Stolen':{c:C.danger,bg:C.dangerLt}};
+  const s=m[status]||{c:C.t2,bg:'#F1F5F9'};
+  return <span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,color:s.c,background:s.bg,whiteSpace:'nowrap'}}><span style={{width:5,height:5,borderRadius:'50%',background:s.c}}/>{status}</span>;
+};
+const EnvBadge=({env})=>{
+  const m={'Production':{c:C.danger,bg:C.dangerLt},'Staging':{c:C.warning,bg:C.warningLt},'Development':{c:C.success,bg:C.successLt},'Test':{c:C.cyan,bg:C.cyanLt},'UAT':{c:C.purple,bg:C.purpleLt},'DR':{c:C.orange,bg:C.orangeLt},'Lab':{c:C.t3,bg:'#F1F5F9'}};
+  const s=m[env]||{c:C.t2,bg:'#F1F5F9'};
+  return <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:20,color:s.c,background:s.bg}}>{env}</span>;
+};
+
+const Btn=({children,variant='primary',size='md',onClick,disabled,sx={},type='button',icon})=>{
+  const[h,sH]=useState(false);
+  const V={primary:{bg:C.primary,bgh:C.primaryH,text:'#fff',bdr:C.primary},danger:{bg:C.danger,bgh:'#B91C1C',text:'#fff',bdr:C.danger},ghost:{bg:'transparent',bgh:C.primaryLt,text:C.primary,bdr:C.border},success:{bg:C.success,bgh:'#047857',text:'#fff',bdr:C.success},warning:{bg:C.warning,bgh:'#B45309',text:'#fff',bdr:C.warning},outline:{bg:'transparent',bgh:'#F8FAFC',text:C.t2,bdr:C.border},teal:{bg:C.teal,bgh:'#0F766E',text:'#fff',bdr:C.teal},indigo:{bg:C.indigo,bgh:'#4338CA',text:'#fff',bdr:C.indigo}};
+  const v=V[variant]||V.primary;
+  const sz=size==='sm'?{padding:'4px 10px',fontSize:11}:size==='xs'?{padding:'3px 7px',fontSize:10}:size==='lg'?{padding:'10px 22px',fontSize:14}:{padding:'7px 13px',fontSize:12};
+  return <button type={type} disabled={disabled} onMouseEnter={()=>sH(true)} onMouseLeave={()=>sH(false)} onClick={onClick} style={{background:h&&!disabled?v.bgh:v.bg,color:v.text,border:`1px solid ${v.bdr}`,borderRadius:6,cursor:disabled?'not-allowed':'pointer',opacity:disabled?.6:1,fontWeight:600,display:'inline-flex',alignItems:'center',gap:5,transition:'all .15s',...sz,...sx}}>{icon&&<span style={{fontSize:12}}>{icon}</span>}{children}</button>;
+};
+const Input=({label,value,onChange,type='text',placeholder,required,error,disabled,sx={}})=>(
+  <div style={{display:'flex',flexDirection:'column',gap:3,...sx}}>
+    {label&&<label style={{fontSize:10,fontWeight:700,color:C.t2,letterSpacing:'0.04em',textTransform:'uppercase'}}>{label}{required&&<span style={{color:C.danger}}> *</span>}</label>}
+    <input type={type} value={value} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} disabled={disabled} style={{padding:'7px 10px',border:`1px solid ${error?C.danger:C.border}`,borderRadius:6,fontSize:12,color:C.t1,background:disabled?'#F8FAFC':'#fff',outline:'none',width:'100%'}} onFocus={e=>{if(!error)e.target.style.borderColor=C.primary;}} onBlur={e=>e.target.style.borderColor=error?C.danger:C.border;}/>
+    {error&&<span style={{fontSize:10,color:C.danger}}>{error}</span>}
+  </div>
+);
+const Sel=({label,value,onChange,opts,required,disabled,sx={}})=>(
+  <div style={{display:'flex',flexDirection:'column',gap:3,...sx}}>
+    {label&&<label style={{fontSize:10,fontWeight:700,color:C.t2,letterSpacing:'0.04em',textTransform:'uppercase'}}>{label}{required&&<span style={{color:C.danger}}> *</span>}</label>}
+    <select value={value} onChange={e=>onChange?.(e.target.value)} disabled={disabled} style={{padding:'7px 10px',border:`1px solid ${C.border}`,borderRadius:6,fontSize:12,color:C.t1,background:disabled?'#F8FAFC':'#fff',outline:'none',cursor:'pointer',width:'100%',appearance:'none',backgroundImage:"url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394A3B8' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E\")",backgroundRepeat:'no-repeat',backgroundPosition:'right 10px center',paddingRight:26}}>
+      {opts.map(o=><option key={o.v??o} value={o.v??o}>{o.l??o}</option>)}
+    </select>
+  </div>
+);
+const Textarea=({label,value,onChange,rows=3,placeholder,required,sx={}})=>(
+  <div style={{display:'flex',flexDirection:'column',gap:3,...sx}}>
+    {label&&<label style={{fontSize:10,fontWeight:700,color:C.t2,letterSpacing:'0.04em',textTransform:'uppercase'}}>{label}{required&&<span style={{color:C.danger}}> *</span>}</label>}
+    <textarea value={value} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder} style={{padding:'7px 10px',border:`1px solid ${C.border}`,borderRadius:6,fontSize:12,color:C.t1,resize:'vertical',outline:'none',width:'100%'}} onFocus={e=>e.target.style.borderColor=C.primary} onBlur={e=>e.target.style.borderColor=C.border}/>
+  </div>
+);
+const Modal=({open,title,onClose,children,width=600})=>{
+  if(!open)return null;
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:'#fff',borderRadius:10,boxShadow:'0 25px 60px rgba(0,0,0,0.25)',width:'100%',maxWidth:width,maxHeight:'92vh',display:'flex',flexDirection:'column',overflow:'hidden',animation:'slideUp .2s ease'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 18px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+        <h3 style={{margin:0,fontSize:14,fontWeight:800,color:C.t1}}>{title}</h3>
+        <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:C.t3,lineHeight:1,padding:'2px 6px'}}>×</button>
+      </div>
+      <div style={{padding:18,overflowY:'auto',flex:1}}>{children}</div>
+    </div>
+  </div>;
+};
+const Toast=({toasts,rem})=>(
+  <div style={{position:'fixed',bottom:18,right:18,zIndex:9999,display:'flex',flexDirection:'column',gap:7}}>
+    {toasts.map(t=>{const g=t.type==='success'?{bg:'#ECFDF5',bdr:'#A7F3D0',left:C.success,ic:'✓'}:t.type==='error'?{bg:'#FEF2F2',bdr:'#FECACA',left:C.danger,ic:'✗'}:t.type==='warning'?{bg:'#FFFBEB',bdr:'#FDE68A',left:C.warning,ic:'⚠'}:{bg:'#EFF6FF',bdr:'#BFDBFE',left:C.primary,ic:'ℹ'};
+    return <div key={t.id} onClick={()=>rem(t.id)} style={{background:g.bg,border:`1px solid ${g.bdr}`,borderLeft:`3px solid ${g.left}`,color:g.left,padding:'9px 13px',borderRadius:6,fontSize:12,fontWeight:600,boxShadow:'0 4px 14px rgba(0,0,0,0.1)',display:'flex',alignItems:'center',gap:9,minWidth:260,maxWidth:340,cursor:'pointer',animation:'slideUp .2s ease'}}>
+      <span>{g.ic}</span><span style={{flex:1}}>{t.msg}</span><span style={{opacity:.4}}>×</span>
+    </div>;})}
+  </div>
+);
+
+// ─── SIDEBAR + HEADER ─────────────────────────────
+const NAV=[
+  {id:'dashboard',label:'Dashboard',icon:'⊞',g:'Main'},
+  {id:'incidents',label:'Incident Mgmt',icon:'🚨',g:'Tickets'},
+  {id:'service_req',label:'Service Requests',icon:'📋',g:'Tickets'},
+  {id:'imac',label:'IMAC',icon:'🔄',g:'Tickets'},
+  {id:'problems',label:'Problem Mgmt',icon:'🔍',g:'Tickets'},
+  {id:'changes',label:'Change Mgmt',icon:'🔧',g:'Tickets'},
+  {id:'cmdb',label:'Assets & CMDB',icon:'🖥️',g:'Resources'},
+  {id:'knowledge',label:'Knowledge Base',icon:'📚',g:'Resources'},
+  {id:'sla',label:'SLA & Escalation',icon:'⏱️',g:'Management'},
+  {id:'employees',label:'Employee Mgmt',icon:'👥',g:'Management'},
+  {id:'users',label:'User Mgmt',icon:'🔐',g:'Management'},
+  {id:'reports',label:'Reports',icon:'📊',g:'Management'},
+];
+const ROLE_NAV={
+  SUPER_ADMIN:['dashboard','incidents','service_req','imac','problems','changes','cmdb','knowledge','sla','employees','users','reports'],
+  ADMIN:['dashboard','incidents','service_req','imac','problems','changes','cmdb','knowledge','sla','employees','users','reports'],
+  EMPLOYEE:['dashboard','service_req','incidents','knowledge'],
+  HELPDESK:['dashboard','incidents','service_req','imac','cmdb','knowledge'],
+  AGENT:['dashboard','incidents','service_req','imac','problems','changes','cmdb','knowledge'],
+  SERVICE_MANAGER:['dashboard','incidents','service_req','imac','problems','changes','cmdb','knowledge','sla','employees','reports'],
+};
+const Sidebar=({user,active,onNav,col,setCol})=>{
+  const vis=NAV.filter(i=>(ROLE_NAV[user.role]||[]).includes(i.id));
+  const groups=[...new Set(NAV.map(n=>n.g))];
+  return <div style={{width:col?56:228,background:C.sb,display:'flex',flexDirection:'column',height:'100vh',position:'fixed',left:0,top:0,zIndex:100,transition:'width .2s ease',borderRight:`1px solid ${C.sbBorder}`,overflow:'hidden'}}>
+    <div style={{padding:col?'13px 11px':'13px',borderBottom:`1px solid ${C.sbBorder}`,display:'flex',alignItems:'center',gap:9,flexShrink:0}}>
+      <div style={{width:28,height:28,borderRadius:6,background:C.primary,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>⚡</div>
+      {!col&&<div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:800,color:'#fff'}}>ITSM<span style={{color:'#60A5FA'}}>Pro</span></div><div style={{fontSize:8,color:'#334155',letterSpacing:'0.1em',textTransform:'uppercase'}}>Service Mgmt</div></div>}
+      <button onClick={()=>setCol(!col)} style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',color:'#334155',fontSize:15,flexShrink:0}}>{col?'›':'‹'}</button>
+    </div>
+    <div style={{flex:1,overflowY:'auto',overflowX:'hidden',padding:'5px 0',scrollbarWidth:'none'}}>
+      {groups.map(g=>{const items=vis.filter(i=>i.g===g);if(!items.length)return null;
+        return <div key={g}>{!col&&<div style={{padding:'5px 13px 2px',fontSize:8,fontWeight:800,color:'#1E3A5F',letterSpacing:'0.12em',textTransform:'uppercase'}}>{g}</div>}
+          {items.map(item=>{const isA=active===item.id;
+            return <button key={item.id} onClick={()=>onNav(item.id)} title={col?item.label:''} style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:col?'8px 14px':'7px 13px',background:isA?C.sbActive:'transparent',border:'none',cursor:'pointer',transition:'background .15s',borderLeft:isA?`2px solid ${C.primary}`:'2px solid transparent',justifyContent:col?'center':'flex-start'}} onMouseEnter={e=>{if(!isA)e.currentTarget.style.background=C.sbHover;}} onMouseLeave={e=>{if(!isA)e.currentTarget.style.background='transparent';}}>
+              <span style={{fontSize:14,flexShrink:0}}>{item.icon}</span>
+              {!col&&<span style={{fontSize:11,color:isA?C.sbActiveTxt:C.sbText,fontWeight:isA?700:400,whiteSpace:'nowrap'}}>{item.label}</span>}
+            </button>;})}
+        </div>;})}
+    </div>
+    {!col&&<div style={{padding:'9px 13px',borderTop:`1px solid ${C.sbBorder}`,display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+      <Avatar name={user.name} size={25}/>
+      <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,color:'#CBD5E1',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user.name}</div><div style={{fontSize:8,color:'#334155'}}>{ROLE_META[user.role]?.label}</div></div>
+      <div style={{width:5,height:5,borderRadius:'50%',background:C.success}}/>
+    </div>}
+  </div>;
+};
+const Header=({user,active,cis,onLogout})=>{
+  const[sm,setSM]=useState(false);
+  const mod=NAV.find(i=>i.id===active);
+  const expiring=cis.filter(c=>{const t=CI_TYPES[c.type];if(t?.cat==='Software'&&c.warrantyExpiry){const d=new Date(c.warrantyExpiry)-Date.now();return d<86400000*30&&d>0;}return false;});
+  return <div style={{background:'#fff',borderBottom:`1px solid ${C.border}`,padding:'0 18px',display:'flex',alignItems:'center',gap:12,height:50,position:'sticky',top:0,zIndex:50,flexShrink:0}}>
+    <div style={{flex:1,display:'flex',alignItems:'center',gap:5}}>
+      <span style={{fontSize:10,color:C.t3}}>ITSM Pro</span><span style={{fontSize:10,color:C.t3}}>›</span>
+      <span style={{fontSize:12,fontWeight:800,color:C.t1}}>{mod?.label||'Dashboard'}</span>
+      <span style={{fontSize:9,color:'#fff',background:C.teal,padding:'1px 6px',borderRadius:10,marginLeft:4,fontWeight:700}}>PART 5 LIVE</span>
+    </div>
+    {expiring.length>0&&<div style={{display:'flex',alignItems:'center',gap:5,background:C.warningLt,border:`1px solid #FDE68A`,borderRadius:6,padding:'4px 10px',fontSize:11,fontWeight:700,color:C.warning}}>
+      ⚠ {expiring.length} License{expiring.length>1?'s':''} Expiring Soon
+    </div>}
+    <div style={{position:'relative'}}>
+      <button onClick={e=>{e.stopPropagation();setSM(!sm);}} style={{background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:7,padding:'3px 6px',borderRadius:6}}>
+        <Avatar name={user.name} size={26}/><div style={{textAlign:'left'}}><div style={{fontSize:11,fontWeight:700,color:C.t1}}>{user.name}</div><div style={{fontSize:9,color:C.t3}}>{ROLE_META[user.role]?.label}</div></div><span style={{fontSize:8,color:C.t3}}>▾</span>
+      </button>
+      {sm&&<div style={{position:'absolute',right:0,top:38,width:190,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:200,overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:'10px 13px',borderBottom:`1px solid ${C.border}`}}><div style={{fontSize:11,fontWeight:700,color:C.t1}}>{user.name}</div><div style={{marginTop:4}}><RoleBadge role={user.role}/></div></div>
+        <div style={{borderTop:`1px solid ${C.border}`}}><button onClick={()=>{setSM(false);onLogout();}} style={{width:'100%',padding:'8px 13px',background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.danger,textAlign:'left'}} onMouseEnter={e=>e.currentTarget.style.background='#FEF2F2'} onMouseLeave={e=>e.currentTarget.style.background='none'}>🚪 Sign Out</button></div>
+      </div>}
+    </div>
+  </div>;
+};
+
+// ══════════════════════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════════════════════
+const Dashboard=({user,cis})=>{
+  const byStatus=s=>cis.filter(c=>c.status===s).length;
+  const byType=t=>cis.filter(c=>c.type===t).length;
+  const byEnv=e=>cis.filter(c=>c.env===e).length;
+  const expiringSoon=cis.filter(c=>{if(!c.warrantyExpiry)return false;const d=new Date(c.warrantyExpiry)-Date.now();return d<86400000*30&&d>0;});
+  const outOfWarranty=cis.filter(c=>c.warrantyExpiry&&new Date(c.warrantyExpiry)<Date.now()&&c.status==='Active');
+  const typeGroups=Object.keys(CI_TYPES).map(t=>({type:t,count:byType(t),icon:CI_TYPES[t].icon,color:CI_TYPES[t].color})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count);
+
+  return <div style={{padding:'18px 20px',maxWidth:1200}}>
+    <div style={{marginBottom:14}}><h1 style={{fontSize:18,fontWeight:800,color:C.t1,margin:'0 0 2px'}}>CMDB Overview</h1><p style={{fontSize:11,color:C.t2,margin:0}}>{cis.length} Configuration Items · {today()}</p></div>
+
+    {(expiringSoon.length>0||outOfWarranty.length>0)&&<div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}}>
+      {expiringSoon.length>0&&<div style={{flex:1,minWidth:200,background:C.warningLt,border:`1px solid #FDE68A`,borderRadius:8,padding:'10px 14px',display:'flex',gap:8,alignItems:'center'}}>
+        <span style={{fontSize:20}}>⚠️</span>
+        <div><div style={{fontSize:12,fontWeight:800,color:C.warning}}>{expiringSoon.length} License{expiringSoon.length>1?'s':''} Expiring in 30 Days</div>
+          <div style={{fontSize:11,color:C.t2}}>{expiringSoon.map(c=>c.name).join(', ')}</div></div>
+      </div>}
+      {outOfWarranty.length>0&&<div style={{flex:1,minWidth:200,background:C.dangerLt,border:`1px solid #FECACA`,borderRadius:8,padding:'10px 14px',display:'flex',gap:8,alignItems:'center'}}>
+        <span style={{fontSize:20}}>🔴</span>
+        <div><div style={{fontSize:12,fontWeight:800,color:C.danger}}>{outOfWarranty.length} Asset{outOfWarranty.length>1?'s':''} Out of Warranty</div>
+          <div style={{fontSize:11,color:C.t2}}>{outOfWarranty.map(c=>c.name).join(', ')}</div></div>
+      </div>}
+    </div>}
+
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(155px,1fr))',gap:10,marginBottom:14}}>
+      {[{l:'Total CIs',v:cis.length,ic:'🖥️',c:C.primary},{l:'Active',v:byStatus('Active'),ic:'✅',c:C.success},{l:'Inactive / Retired',v:byStatus('Inactive')+byStatus('Retired'),ic:'📦',c:C.t3},{l:'In Repair',v:byStatus('In Repair'),ic:'🔧',c:C.warning},{l:'Production',v:byEnv('Production'),ic:'🏭',c:C.danger},{l:'Out of Warranty',v:outOfWarranty.length,ic:'⚠️',c:C.orange}].map((s,i)=>(
+        <div key={i} style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:13}}>
+          <div style={{width:32,height:32,borderRadius:7,background:`${s.c}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,marginBottom:8}}>{s.ic}</div>
+          <div style={{fontSize:22,fontWeight:800,color:C.t1,lineHeight:1}}>{s.v}</div>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{s.l}</div>
+        </div>
+      ))}
+    </div>
+
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+      <div style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:14}}>
+        <div style={{fontSize:12,fontWeight:800,color:C.t1,marginBottom:12}}>CIs by Type</div>
+        {typeGroups.map(({type,count,icon,color})=>(
+          <div key={type} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+            <span style={{fontSize:16,width:20,textAlign:'center'}}>{icon}</span>
+            <span style={{fontSize:11,color:C.t2,flex:1}}>{type}</span>
+            <div style={{width:80,height:5,background:'#F1F5F9',borderRadius:2}}>
+              <div style={{height:5,borderRadius:2,background:color,width:`${(count/cis.length)*100}%`,transition:'width .5s'}}/>
+            </div>
+            <span style={{fontSize:11,fontWeight:700,color:C.t1,minWidth:16,textAlign:'right'}}>{count}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:14}}>
+        <div style={{fontSize:12,fontWeight:800,color:C.t1,marginBottom:12}}>Recent Changes to CMDB</div>
+        {cis.filter(c=>c.history?.length>0).slice(0,6).map(ci=>{
+          const last=ci.history[ci.history.length-1];
+          const t=CI_TYPES[ci.type];
+          return <div key={ci.id} style={{display:'flex',gap:8,marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${C.borderFaint}`}}>
+            <span style={{fontSize:18,flexShrink:0}}>{t?.icon||'📋'}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ci.name}</div>
+              <div style={{fontSize:10,color:C.t2}}>{last?.action}</div>
+              <div style={{fontSize:9,color:C.t3}}>{last?.at}</div>
+            </div>
+            <StatusBadge status={ci.status}/>
+          </div>;
+        })}
+      </div>
+    </div>
+  </div>;
+};
+
+// ══════════════════════════════════════════════════════════════
+// CMDB MODULE — MAIN
+// ══════════════════════════════════════════════════════════════
+const CMDBModule=({me,cis,setCIs,addToast})=>{
+  const[tab,setTab]=useState('list');
+  const[selected,setSelected]=useState(null);
+  const[showNew,setSN]=useState(false);
+  const[search,setSearch]=useState('');
+  const[fType,setFT]=useState('');
+  const[fStatus,setFS]=useState('');
+  const[fEnv,setFE]=useState('');
+  const[fCat,setFC]=useState('');
+  const[page,setPage]=useState(1);
+  const PAGE=10;
+
+  const canEdit=['AGENT','HELPDESK','SERVICE_MANAGER','ADMIN','SUPER_ADMIN'].includes(me.role);
+
+  const cats=[...new Set(Object.values(CI_TYPES).map(t=>t.cat))];
+
+  const filtered=useMemo(()=>{
+    const q=search.toLowerCase();
+    return cis.filter(c=>{
+      const t=CI_TYPES[c.type];
+      return(!q||c.id.toLowerCase().includes(q)||c.name.toLowerCase().includes(q)||(c.fields?.['Serial Number']||'').toLowerCase().includes(q)||(c.fields?.['Asset Tag']||'').toLowerCase().includes(q)||(c.fields?.['IP Address']||'').toLowerCase().includes(q)||(c.fields?.['Hostname']||'').toLowerCase().includes(q))
+        &&(!fType||c.type===fType)&&(!fStatus||c.status===fStatus)&&(!fEnv||c.env===fEnv)&&(!fCat||t?.cat===fCat);
+    }).sort((a,b)=>a.name.localeCompare(b.name));
+  },[cis,search,fType,fStatus,fEnv,fCat]);
+
+  const paged=filtered.slice((page-1)*PAGE,page*PAGE);
+  const totalP=Math.ceil(filtered.length/PAGE);
+
+  const updateCI=ci=>{setCIs(prev=>prev.map(x=>x.id===ci.id?ci:x));setSelected(ci);addToast('success',`${ci.name} updated`);};
+
+  // ─── ADD CI FORM ──────────────────────────────
+  const AddCIForm=()=>{
+    const[ciType,setCIType]=useState('Laptop');
+    const[step,setStep]=useState(1);
+    const[f,setF]=useState({name:'',status:'Active',env:'Production',location:LOCATIONS[0],dept:DEPARTMENTS[0],assignedTo:'',managedBy:me.id,purchaseDate:'',warrantyExpiry:'',tags:''});
+    const[fieldVals,setFV]=useState({});
+    const[errs,setErrs]=useState({});
+    const ff=k=>v=>setF(p=>({...p,[k]:v}));
+    const typeInfo=CI_TYPES[ciType]||CI_TYPES.Laptop;
+
+    const validate=()=>{const e={};if(!f.name.trim())e.name='Required';return e;};
+    const submit=()=>{
+      const e=validate();if(Object.keys(e).length){setErrs(e);return;}
+      const nc={id:genId('CI'),name:f.name,type:ciType,status:f.status,env:f.env,location:f.location,dept:f.dept,assignedTo:f.assignedTo||null,managedBy:f.managedBy,purchaseDate:f.purchaseDate||null,warrantyExpiry:f.warrantyExpiry||null,lastSeen:now(),tags:f.tags.split(',').map(s=>s.trim()).filter(Boolean),fields:fieldVals,relationships:[],incidents:[],changes:[],problems:[],notes:[],history:[{action:'Registered in CMDB',by:me.id,at:now(),note:`CI type: ${ciType}`}]};
+      setCIs(p=>[nc,...p]);addToast('success',`${nc.name} registered in CMDB`);setSN(false);
+    };
+
+    return <div>
+      <div style={{display:'flex',gap:0,marginBottom:16,background:'#F8FAFC',border:`1px solid ${C.border}`,borderRadius:8,padding:3}}>
+        {['1. CI Type','2. Details','3. Attributes'].map((s,i)=><div key={s} style={{flex:1,padding:'6px 10px',borderRadius:5,background:step===i+1?C.primary:'transparent',color:step===i+1?'#fff':C.t2,fontSize:11,fontWeight:step===i+1?700:400,cursor:'pointer',textAlign:'center'}} onClick={()=>setStep(i+1)}>{s}</div>)}
+      </div>
+
+      {step===1&&<div>
+        <div style={{fontSize:11,fontWeight:700,color:C.t1,marginBottom:10}}>Select CI Type</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:7}}>
+          {Object.entries(CI_TYPES).map(([k,v])=><div key={k} onClick={()=>{setCIType(k);setFV({});}} style={{padding:'10px 12px',borderRadius:8,border:`2px solid ${ciType===k?v.color:C.border}`,background:ciType===k?v.color+'18':'#fff',cursor:'pointer',transition:'all .15s'}}>
+            <div style={{fontSize:22,marginBottom:4}}>{v.icon}</div>
+            <div style={{fontSize:11,fontWeight:700,color:ciType===k?v.color:C.t1}}>{k}</div>
+            <div style={{fontSize:9,color:C.t3}}>{v.cat}</div>
+          </div>)}
+        </div>
+        <div style={{display:'flex',justifyContent:'flex-end',marginTop:12}}><Btn onClick={()=>setStep(2)}>Next →</Btn></div>
+      </div>}
+
+      {step===2&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:CI_TYPES[ciType]?.color+'12',borderRadius:8,border:`1px solid ${CI_TYPES[ciType]?.color}40`}}>
+          <span style={{fontSize:28}}>{CI_TYPES[ciType]?.icon}</span>
+          <div><div style={{fontSize:12,fontWeight:700,color:CI_TYPES[ciType]?.color}}>{ciType}</div><div style={{fontSize:10,color:C.t2}}>{CI_TYPES[ciType]?.cat}</div></div>
+        </div>
+        <Input label="CI Name / Hostname" value={f.name} onChange={ff('name')} required error={errs.name} sx={{gridColumn:'1/-1'}} placeholder={ciType==='Laptop'?'e.g. JD-LT-001':ciType==='Server'?'e.g. PROD-APP-01':'CI name…'}/>
+        <Sel label="Status" value={f.status} onChange={ff('status')} opts={CI_STATUSES.map(s=>({v:s,l:s}))} required/>
+        <Sel label="Environment" value={f.env} onChange={ff('env')} opts={CI_ENVIRONMENTS.map(e=>({v:e,l:e}))} required/>
+        <Sel label="Location" value={f.location} onChange={ff('location')} opts={LOCATIONS.map(l=>({v:l,l:l}))} sx={{gridColumn:'1/-1'}}/>
+        <Sel label="Department" value={f.dept} onChange={ff('dept')} opts={DEPARTMENTS.map(d=>({v:d,l:d}))}/>
+        <Sel label="Managed By" value={f.managedBy} onChange={ff('managedBy')} opts={USERS.filter(u=>['AGENT','ADMIN','SUPER_ADMIN','SERVICE_MANAGER'].includes(u.role)).map(u=>({v:u.id,l:u.name}))}/>
+        <Sel label="Assigned To (User)" value={f.assignedTo} onChange={ff('assignedTo')} opts={[{v:'',l:'— Not Assigned —'},...USERS.map(u=>({v:u.id,l:`${u.name} (${u.dept})`}))]} sx={{gridColumn:'1/-1'}}/>
+        <Input label="Purchase Date" type="date" value={f.purchaseDate} onChange={ff('purchaseDate')}/>
+        <Input label="Warranty Expiry" type="date" value={f.warrantyExpiry} onChange={ff('warrantyExpiry')}/>
+        <Input label="Tags (comma-separated)" value={f.tags} onChange={ff('tags')} placeholder="e.g. production, critical, sql" sx={{gridColumn:'1/-1'}}/>
+        <div style={{gridColumn:'1/-1',display:'flex',gap:8,justifyContent:'flex-end'}}><Btn variant="outline" onClick={()=>setStep(1)}>← Back</Btn><Btn onClick={()=>setStep(3)}>Next →</Btn></div>
+      </div>}
+
+      {step===3&&<div style={{display:'flex',flexDirection:'column',gap:0}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.t1,marginBottom:10}}>Technical Attributes for {ciType}</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
+          {CI_TYPES[ciType]?.fields.map(field=>(
+            <Input key={field} label={field} value={fieldVals[field]||''} onChange={v=>setFV(p=>({...p,[field]:v}))} placeholder={field} sx={field.length>20?{gridColumn:'1/-1'}:{}}/>
+          ))}
+        </div>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:14,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+          <Btn variant="outline" onClick={()=>setStep(2)}>← Back</Btn>
+          <Btn onClick={submit}>{CI_TYPES[ciType]?.icon} Register CI</Btn>
+        </div>
+      </div>}
+    </div>;
+  };
+
+  // ─── CI DETAIL PANEL ──────────────────────────
+  const CIDetail=({ci})=>{
+    const[detTab,setDT]=useState('details');
+    const[editMode,setEM]=useState(false);
+    const[showRelForm,setSRF]=useState(false);
+    const[relTarget,setRT]=useState('');
+    const[relType,setRTy]=useState(REL_TYPES[0]);
+    const[noteText,setNT]=useState('');
+    const[editStatus,setES]=useState(ci.status);
+    const typeInfo=CI_TYPES[ci.type]||{icon:'📋',color:C.primary,fields:[]};
+    const assignedUser=USERS.find(u=>u.id===ci.assignedTo);
+    const managedUser=USERS.find(u=>u.id===ci.managedBy);
+    const isExpired=ci.warrantyExpiry&&new Date(ci.warrantyExpiry)<Date.now();
+    const isExpiringSoon=ci.warrantyExpiry&&!isExpired&&(new Date(ci.warrantyExpiry)-Date.now())<86400000*30;
+
+    const addRelationship=()=>{
+      if(!relTarget)return;
+      const newRel={targetId:relTarget,type:relType,direction:'out'};
+      const updCI={...ci,relationships:[...(ci.relationships||[]),newRel],history:[...(ci.history||[]),{action:`Relationship Added: ${relType} → ${cis.find(c=>c.id===relTarget)?.name}`,by:me.id,at:now(),note:''}]};
+      updateCI(updCI);setSRF(false);
+    };
+
+    const addNote=()=>{
+      if(!noteText.trim())return;
+      const n={id:'n'+Date.now(),text:noteText,by:me.id,at:now()};
+      updateCI({...ci,notes:[...(ci.notes||[]),n],history:[...(ci.history||[]),{action:'Note Added',by:me.id,at:now(),note:noteText.substring(0,80)}]});
+      setNT('');
+    };
+
+    const updateStatus=()=>{
+      if(editStatus===ci.status)return;
+      updateCI({...ci,status:editStatus,history:[...(ci.history||[]),{action:`Status: ${editStatus}`,by:me.id,at:now(),note:`Changed from ${ci.status}`}]});
+    };
+
+    const rels=ci.relationships||[];
+    const relCIs=rels.map(r=>({...r,ci:cis.find(c=>c.id===r.targetId)})).filter(r=>r.ci);
+    const inboundRels=cis.flatMap(c=>(c.relationships||[]).filter(r=>r.targetId===ci.id&&r.direction==='out').map(r=>({...r,ci:c,direction:'in'})));
+
+    return <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
+      {/* Header */}
+      <div style={{padding:'12px 14px',borderBottom:`1px solid ${C.border}`,background:`${typeInfo.color}08`,flexShrink:0}}>
+        <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:5}}>
+          <span style={{fontSize:22}}>{typeInfo.icon}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:800,color:C.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ci.name}</div>
+            <div style={{fontSize:10,color:C.t2}}>{ci.id} · {ci.type}</div>
+          </div>
+          <button onClick={()=>setSelected(null)} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:C.t3,flexShrink:0}}>×</button>
+        </div>
+        <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+          <StatusBadge status={ci.status}/>
+          <EnvBadge env={ci.env}/>
+          {isExpired&&<Tag label="⚠ Out of Warranty" color={C.danger} bg={C.dangerLt}/>}
+          {isExpiringSoon&&<Tag label="⏰ Expiring Soon" color={C.warning} bg={C.warningLt}/>}
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,flexShrink:0,overflowX:'auto'}}>
+        {[['details','Details'],['attrs','Attributes'],['rels','Relations'],['linked','Linked'],['notes','Notes'],['history','History']].map(([v,l])=>(
+          <button key={v} onClick={()=>setDT(v)} style={{padding:'8px 12px',border:'none',borderBottom:`2px solid ${detTab===v?typeInfo.color:'transparent'}`,background:'transparent',color:detTab===v?typeInfo.color:C.t2,fontSize:11,fontWeight:detTab===v?700:400,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
+        ))}
+      </div>
+
+      <div style={{flex:1,overflowY:'auto',padding:14}}>
+        {detTab==='details'&&<div>
+          {canEdit&&<div style={{display:'flex',gap:6,marginBottom:12}}>
+            <Sel value={editStatus} onChange={setES} opts={CI_STATUSES.map(s=>({v:s,l:s}))} sx={{minWidth:140}}/>
+            <Btn size="sm" onClick={updateStatus} disabled={editStatus===ci.status}>Update Status</Btn>
+          </div>}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7}}>
+            {[['CI ID',ci.id],['Type',ci.type],['Status',ci.status],['Environment',ci.env],['Location',ci.location],['Department',ci.dept],['Assigned To',assignedUser?.name||'—'],['Managed By',managedUser?.name||'—'],['Purchase Date',ci.purchaseDate||'—'],['Warranty Expiry',ci.warrantyExpiry||'—'],['Last Seen',ci.lastSeen]].map(([k,v])=>(
+              <div key={k} style={{background:'#F8FAFC',borderRadius:6,padding:'6px 9px',gridColumn:k==='CI ID'?'1/-1':undefined}}>
+                <div style={{fontSize:9,color:C.t3,marginBottom:2,textTransform:'uppercase',letterSpacing:'0.05em'}}>{k}</div>
+                <div style={{fontSize:11,fontWeight:600,color:k==='Status'?({Active:C.success,'In Repair':C.warning,Retired:C.t3}[v]||C.t1):C.t1,wordBreak:'break-all'}}>{v}</div>
+              </div>
+            ))}
+          </div>
+          {ci.tags?.length>0&&<div style={{marginTop:8,display:'flex',gap:4,flexWrap:'wrap'}}>
+            {ci.tags.map(t=><Tag key={t} label={`#${t}`} color={C.primary} bg={C.primaryLt}/>)}
+          </div>}
+        </div>}
+
+        {detTab==='attrs'&&<div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7}}>
+            {Object.entries(ci.fields||{}).map(([k,v])=>(
+              <div key={k} style={{background:'#F8FAFC',borderRadius:6,padding:'6px 9px',gridColumn:k.length>15?'1/-1':undefined}}>
+                <div style={{fontSize:9,color:C.t3,marginBottom:2,textTransform:'uppercase',letterSpacing:'0.04em'}}>{k}</div>
+                <div style={{fontSize:11,fontWeight:600,color:C.t1,wordBreak:'break-all'}}>{v||'—'}</div>
+              </div>
+            ))}
+          </div>
+        </div>}
+
+        {detTab==='rels'&&<div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.t1}}>CI Relationships ({relCIs.length+inboundRels.length})</div>
+            {canEdit&&<Btn size="sm" variant="teal" icon="+" onClick={()=>setSRF(!showRelForm)}>Add</Btn>}
+          </div>
+
+          {showRelForm&&<div style={{background:'#F8FAFC',border:`1px solid ${C.border}`,borderRadius:8,padding:11,marginBottom:12}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <Sel label="This CI" value={relType} onChange={setRTy} opts={REL_TYPES.map(t=>({v:t,l:t}))}/>
+              <Sel label="Target CI" value={relTarget} onChange={setRT} opts={[{v:'',l:'— Select CI —'},...cis.filter(c=>c.id!==ci.id).map(c=>({v:c.id,l:`${c.name} (${c.type})`}))]}/>
+            </div>
+            <div style={{display:'flex',gap:7,marginTop:8}}><Btn size="sm" onClick={addRelationship} disabled={!relTarget}>Add Relationship</Btn><Btn size="sm" variant="outline" onClick={()=>setSRF(false)}>Cancel</Btn></div>
+          </div>}
+
+          {/* Outbound */}
+          {relCIs.length>0&&<div style={{marginBottom:10}}>
+            <div style={{fontSize:10,color:C.t3,fontWeight:700,textTransform:'uppercase',marginBottom:6}}>Outbound ({relCIs.length})</div>
+            {relCIs.map(({ci:tc,type},i)=>{const tt=CI_TYPES[tc.type];return <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,marginBottom:5,cursor:'pointer',transition:'all .15s'}} onClick={()=>setSelected(tc)} onMouseEnter={e=>e.currentTarget.style.background='#F8FAFC'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <span style={{fontSize:18}}>{tt?.icon||'📋'}</span>
+              <div style={{flex:1}}><div style={{fontSize:11,fontWeight:700,color:C.t1}}>{tc.name}</div><div style={{fontSize:9,color:C.t2}}>{tc.type} · {tc.env}</div></div>
+              <span style={{fontSize:9,color:typeInfo.color,background:typeInfo.color+'15',padding:'2px 7px',borderRadius:20,fontWeight:700,whiteSpace:'nowrap'}}>{type}</span>
+              <StatusBadge status={tc.status}/>
+            </div>;})}
+          </div>}
+
+          {/* Inbound */}
+          {inboundRels.length>0&&<div>
+            <div style={{fontSize:10,color:C.t3,fontWeight:700,textTransform:'uppercase',marginBottom:6}}>Inbound ({inboundRels.length})</div>
+            {inboundRels.map(({ci:sc,type},i)=>{const st=CI_TYPES[sc.type];return <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,marginBottom:5,cursor:'pointer',transition:'all .15s'}} onClick={()=>setSelected(sc)} onMouseEnter={e=>e.currentTarget.style.background='#F8FAFC'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <span style={{fontSize:18}}>{st?.icon||'📋'}</span>
+              <div style={{flex:1}}><div style={{fontSize:11,fontWeight:700,color:C.t1}}>{sc.name}</div><div style={{fontSize:9,color:C.t2}}>{sc.type} · {sc.env}</div></div>
+              <span style={{fontSize:9,color:C.t3,background:'#F1F5F9',padding:'2px 7px',borderRadius:20,fontWeight:700,whiteSpace:'nowrap'}}>← {type}</span>
+              <StatusBadge status={sc.status}/>
+            </div>;})}
+          </div>}
+
+          {relCIs.length===0&&inboundRels.length===0&&<div style={{padding:30,textAlign:'center',color:C.t3,fontSize:12}}>No relationships defined</div>}
+        </div>}
+
+        {detTab==='linked'&&<div>
+          {[['🚨 Incidents',ci.incidents||[],'danger'],['🔧 Changes',ci.changes||[],'primary'],['🔍 Problems',ci.problems||[],'purple']].map(([label,ids,color])=>(
+            ids.length>0&&<div key={label} style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.t1,marginBottom:6}}>{label}</div>
+              {ids.map(id=><div key={id} style={{padding:'7px 10px',borderRadius:6,background:'#F8FAFC',border:`1px solid ${C.border}`,marginBottom:4,display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontFamily:'monospace',fontSize:11,color:C[color],fontWeight:800}}>{id}</span>
+              </div>)}
+            </div>
+          ))}
+          {(ci.incidents||[]).length===0&&(ci.changes||[]).length===0&&(ci.problems||[]).length===0&&<div style={{padding:30,textAlign:'center',color:C.t3,fontSize:12}}>No linked tickets</div>}
+        </div>}
+
+        {detTab==='notes'&&<div>
+          {(ci.notes||[]).map(n=>{const u=USERS.find(x=>x.id===n.by);return <div key={n.id} style={{background:'#F8FAFC',border:`1px solid ${C.border}`,borderRadius:7,padding:10,marginBottom:7}}>
+            <div style={{display:'flex',gap:7,alignItems:'center',marginBottom:4}}><Avatar name={u?.name||'?'} size={20}/><span style={{fontSize:10,fontWeight:700,color:C.t1}}>{u?.name||'—'}</span><span style={{fontSize:9,color:C.t3}}>{n.at}</span></div>
+            <div style={{fontSize:11,color:C.t1,lineHeight:1.6,paddingLeft:27}}>{n.text}</div>
+          </div>;})}
+          {canEdit&&<div style={{display:'flex',gap:7,alignItems:'flex-end',marginTop:8}}>
+            <div style={{flex:1}}><Textarea value={noteText} onChange={setNT} rows={2} placeholder="Add note about this CI…"/></div>
+            <Btn size="sm" onClick={addNote} disabled={!noteText.trim()}>Add</Btn>
+          </div>}
+        </div>}
+
+        {detTab==='history'&&<div>
+          {[...(ci.history||[])].reverse().map((h,i)=>{const u=USERS.find(x=>x.id===h.by);return <div key={i} style={{display:'flex',gap:8,marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${C.borderFaint}`}}>
+            <Avatar name={u?.name||'System'} size={22}/>
+            <div style={{flex:1}}><div style={{display:'flex',gap:5,flexWrap:'wrap'}}><span style={{fontSize:10,fontWeight:700,color:C.t1}}>{u?.name||'System'}</span><span style={{fontSize:9,color:C.t3}}>{h.at}</span></div>
+              <div style={{fontSize:10,color:typeInfo.color,fontWeight:700}}>{h.action}</div>
+              {h.note&&<div style={{fontSize:10,color:C.t2,marginTop:1}}>{h.note}</div>}
+            </div>
+          </div>;})}
+        </div>}
+      </div>
+    </div>;
+  };
+
+  // ─── RELATIONSHIP GRAPH (SVG-based) ───────────
+  const RelationshipGraph=()=>{
+    const[hoverId,setHover]=useState(null);
+    const[centerCI,setCenterCI]=useState(cis[0]?.id);
+    const center=cis.find(c=>c.id===centerCI)||cis[0];
+    if(!center)return null;
+    const rels=center.relationships||[];
+    const relCIs=rels.map(r=>({...r,ci:cis.find(c=>c.id===r.targetId)})).filter(r=>r.ci);
+    const inbound=cis.flatMap(c=>(c.relationships||[]).filter(r=>r.targetId===center.id).map(r=>({...r,ci:c}))).filter(r=>r.ci);
+    const allNodes=[...relCIs,...inbound];
+    const R=150,cx=320,cy=200;
+    const angle=i=>i*(2*Math.PI/Math.max(allNodes.length,1));
+
+    return <div style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:14}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+        <div style={{fontSize:12,fontWeight:800,color:C.t1}}>CI Relationship Map</div>
+        <Sel value={centerCI} onChange={setCenterCI} opts={cis.map(c=>({v:c.id,l:`${c.name} (${c.type})`}))} sx={{minWidth:220}}/>
+      </div>
+      <div style={{overflowX:'auto'}}>
+        <svg width="100%" viewBox={`0 0 640 400`} style={{maxHeight:400}}>
+          <defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round"/></marker></defs>
+          {/* Connections */}
+          {allNodes.map((r,i)=>{
+            const nx=cx+R*Math.cos(angle(i)-Math.PI/2);
+            const ny=cy+R*Math.sin(angle(i)-Math.PI/2);
+            const isOut=r.direction==='out'||(rels.some(rel=>rel.targetId===r.ci.id));
+            return <g key={i}>
+              <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#CBD5E1" strokeWidth="1.5" strokeDasharray={isOut?"":"4 3"} markerEnd="url(#arr)" opacity={hoverId&&hoverId!==r.ci.id?.5:1}/>
+              <text x={(cx+nx)/2} y={(cy+ny)/2-5} fontSize="8" fill="#94A3B8" textAnchor="middle">{r.type}</text>
+            </g>;})}
+
+          {/* Center node */}
+          <g onClick={()=>setSelected(center)} style={{cursor:'pointer'}}>
+            <circle cx={cx} cy={cy} r={32} fill={CI_TYPES[center.type]?.color||C.primary} opacity={0.12}/>
+            <circle cx={cx} cy={cy} r={32} fill="none" stroke={CI_TYPES[center.type]?.color||C.primary} strokeWidth="2.5"/>
+            <text x={cx} y={cy-6} fontSize="18" textAnchor="middle" dominantBaseline="middle">{CI_TYPES[center.type]?.icon||'📋'}</text>
+            <text x={cx} y={cy+14} fontSize="9" fontWeight="700" fill={C.t1} textAnchor="middle">{center.name.substring(0,14)}</text>
+          </g>
+
+          {/* Related nodes */}
+          {allNodes.map((r,i)=>{
+            const nx=cx+R*Math.cos(angle(i)-Math.PI/2);
+            const ny=cy+R*Math.sin(angle(i)-Math.PI/2);
+            const ci=r.ci;
+            const t=CI_TYPES[ci.type]||{icon:'📋',color:C.t3};
+            const isHov=hoverId===ci.id;
+            return <g key={i} onClick={()=>{setCenterCI(ci.id);setSelected(ci);}} onMouseEnter={()=>setHover(ci.id)} onMouseLeave={()=>setHover(null)} style={{cursor:'pointer'}}>
+              <circle cx={nx} cy={ny} r={isHov?26:22} fill={t.color} opacity={isHov?0.2:0.1} style={{transition:'r .15s'}}/>
+              <circle cx={nx} cy={ny} r={isHov?26:22} fill="none" stroke={t.color} strokeWidth={isHov?2:1.5}/>
+              <text x={nx} y={ny-3} fontSize="14" textAnchor="middle" dominantBaseline="middle">{t.icon}</text>
+              <text x={nx} y={ny+16} fontSize="8" fontWeight={isHov?700:400} fill={C.t1} textAnchor="middle">{ci.name.substring(0,12)}</text>
+              <text x={nx} y={ny+26} fontSize="7" fill={C.t3} textAnchor="middle">{ci.type}</text>
+            </g>;})}
+        </svg>
+      </div>
+      <div style={{fontSize:10,color:C.t3,textAlign:'center',marginTop:6}}>Click any node to re-center · Solid lines = outbound · Dashed = inbound</div>
+    </div>;
+  };
+
+  // ─── SOFTWARE LICENSES ────────────────────────
+  const LicenseView=()=>{
+    const licenses=cis.filter(c=>c.type==='Software License');
+    return <div>
+      <div style={{fontSize:12,fontWeight:800,color:C.t1,marginBottom:12}}>Software License Management</div>
+      {licenses.length===0?<div style={{padding:40,textAlign:'center',color:C.t3}}>No software licenses tracked</div>:licenses.map(lic=>{
+        const used=parseInt(lic.fields?.['Seats Used']||0);
+        const total=parseInt(lic.fields?.['License Count']||1);
+        const pct=total>0?Math.min(100,Math.round(used/total*100)):0;
+        const expiry=lic.warrantyExpiry||lic.fields?.['Expiry Date'];
+        const expired=expiry&&new Date(expiry)<Date.now();
+        const expiringSoon=expiry&&!expired&&(new Date(expiry)-Date.now())<86400000*30;
+        return <div key={lic.id} onClick={()=>setSelected(lic)} style={{background:C.card,borderRadius:8,border:`1px solid ${expired?C.danger:expiringSoon?C.warning:C.border}`,padding:'12px 14px',marginBottom:8,cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+          <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+            <span style={{fontSize:28}}>📄</span>
+            <div style={{flex:1}}>
+              <div style={{display:'flex',gap:6,marginBottom:4,flexWrap:'wrap',alignItems:'center'}}>
+                <span style={{fontSize:13,fontWeight:700,color:C.t1}}>{lic.name}</span>
+                <StatusBadge status={lic.status}/>
+                {expired&&<Tag label="⚠ EXPIRED" color={C.danger} bg={C.dangerLt}/>}
+                {expiringSoon&&<Tag label="⏰ Expiring Soon" color={C.warning} bg={C.warningLt}/>}
+              </div>
+              <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:8}}>
+                <span style={{fontSize:11,color:C.t2}}>Vendor: {lic.fields?.Vendor||'—'}</span>
+                <span style={{fontSize:11,color:C.t2}}>Type: {lic.fields?.['License Type']||'—'}</span>
+                <span style={{fontSize:11,color:C.t2}}>Expires: {expiry||'—'}</span>
+                <span style={{fontSize:11,color:C.t2}}>Cost: {lic.fields?.['Cost (USD)']||'—'}</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{flex:1,height:6,background:'#F1F5F9',borderRadius:3}}>
+                  <div style={{height:6,borderRadius:3,background:pct>90?C.danger:pct>70?C.warning:C.success,width:`${pct}%`,transition:'width .5s'}}/>
+                </div>
+                <span style={{fontSize:11,fontWeight:700,color:pct>90?C.danger:pct>70?C.warning:C.t1,whiteSpace:'nowrap'}}>{used}/{total} seats ({pct}%)</span>
+              </div>
+            </div>
+          </div>
+        </div>;})}
+    </div>;
+  };
+
+  return <div style={{display:'flex',height:'calc(100vh - 50px)'}}>
+    <div style={{flex:1,overflowY:'auto',padding:'16px 18px',borderRight:selected?`1px solid ${C.border}`:'none',minWidth:0}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+        <div><h2 style={{fontSize:16,fontWeight:800,color:C.t1,margin:'0 0 2px'}}>Configuration Management Database</h2><p style={{fontSize:10,color:C.t2,margin:0}}>{cis.length} CIs · {cis.filter(c=>c.status==='Active').length} active · {cis.filter(c=>c.type==='Software License').length} licenses</p></div>
+        {canEdit&&<Btn icon="+" onClick={()=>setSN(true)}>Register CI</Btn>}
+      </div>
+
+      <div style={{display:'flex',gap:0,marginBottom:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:3,width:'fit-content',flexWrap:'wrap'}}>
+        {[['list','📋 All CIs'],['licenses','📄 Licenses'],['graph','🗺️ Topology']].map(([v,l])=><button key={v} onClick={()=>setTab(v)} style={{padding:'5px 12px',borderRadius:5,border:'none',background:tab===v?C.teal:'transparent',color:tab===v?'#fff':C.t2,fontSize:11,fontWeight:tab===v?700:400,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>)}
+      </div>
+
+      {tab==='graph'&&<RelationshipGraph/>}
+      {tab==='licenses'&&<LicenseView/>}
+
+      {tab==='list'&&<>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:9,marginBottom:10,display:'flex',gap:7,flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:180}}><Input placeholder="Search name, ID, IP, serial, hostname…" value={search} onChange={v=>{setSearch(v);setPage(1);}}/></div>
+          <Sel value={fCat} onChange={v=>{setFC(v);setPage(1);}} opts={[{v:'',l:'All Categories'},...cats.map(c=>({v:c,l:c}))]} sx={{minWidth:120}}/>
+          <Sel value={fType} onChange={v=>{setFT(v);setPage(1);}} opts={[{v:'',l:'All Types'},...Object.keys(CI_TYPES).map(t=>({v:t,l:t}))]} sx={{minWidth:140}}/>
+          <Sel value={fStatus} onChange={v=>{setFS(v);setPage(1);}} opts={[{v:'',l:'All Status'},...CI_STATUSES.map(s=>({v:s,l:s}))]} sx={{minWidth:120}}/>
+          <Sel value={fEnv} onChange={v=>{setFE(v);setPage(1);}} opts={[{v:'',l:'All Env'},...CI_ENVIRONMENTS.map(e=>({v:e,l:e}))]} sx={{minWidth:110}}/>
+          {(search||fType||fStatus||fEnv||fCat)&&<Btn variant="outline" size="sm" onClick={()=>{setSearch('');setFT('');setFS('');setFE('');setFC('');setPage(1);}}>Clear ×</Btn>}
+        </div>
+
+        <div style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,overflow:'hidden'}}>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',minWidth:820}}>
+              <thead><tr style={{background:'#F8FAFC',borderBottom:`1px solid ${C.border}`}}>
+                {['CI','Name','Type','Status','Environment','Location','Managed By','Relationships','Last Seen'].map(h=><th key={h} style={{padding:'7px 11px',fontSize:9,fontWeight:800,color:C.t3,textAlign:'left',letterSpacing:'0.07em',textTransform:'uppercase',whiteSpace:'nowrap'}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {paged.length===0&&<tr><td colSpan={9} style={{padding:40,textAlign:'center',color:C.t3}}>No CIs found</td></tr>}
+                {paged.map(ci=>{
+                  const t=CI_TYPES[ci.type]||{icon:'📋',color:C.t3};
+                  const mgr=USERS.find(u=>u.id===ci.managedBy);
+                  const isV=selected?.id===ci.id;
+                  const isExpired=ci.warrantyExpiry&&new Date(ci.warrantyExpiry)<Date.now()&&ci.type!=='Cloud Instance';
+                  const relCount=(ci.relationships||[]).length+cis.filter(c=>(c.relationships||[]).some(r=>r.targetId===ci.id)).length;
+                  return <tr key={ci.id} onClick={()=>setSelected(isV?null:ci)} style={{borderBottom:`1px solid ${C.borderFaint}`,background:isV?`${t.color}08`:isExpired?'#FFF5F5':'transparent',cursor:'pointer',transition:'background .1s'}} onMouseEnter={e=>e.currentTarget.style.background=isV?`${t.color}08`:'#FAFBFF'} onMouseLeave={e=>e.currentTarget.style.background=isV?`${t.color}08`:isExpired?'#FFF5F5':'transparent'}>
+                    <td style={{padding:'8px 11px',fontFamily:'monospace',fontSize:9,color:C.t3,fontWeight:700,whiteSpace:'nowrap'}}>{ci.id}</td>
+                    <td style={{padding:'8px 11px'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:7}}>
+                        <span style={{fontSize:18}}>{t.icon}</span>
+                        <div>
+                          <div style={{fontSize:12,fontWeight:700,color:C.t1,whiteSpace:'nowrap'}}>{ci.name}</div>
+                          <div style={{fontSize:9,color:C.t3}}>{ci.fields?.['IP Address']||ci.fields?.['Asset Tag']||ci.fields?.['Serial Number']||''}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{padding:'8px 11px',fontSize:10,color:C.t2,whiteSpace:'nowrap'}}>{ci.type}</td>
+                    <td style={{padding:'8px 11px'}}><StatusBadge status={ci.status}/></td>
+                    <td style={{padding:'8px 11px'}}><EnvBadge env={ci.env}/></td>
+                    <td style={{padding:'8px 11px',fontSize:10,color:C.t2,whiteSpace:'nowrap',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis'}}>{ci.location}</td>
+                    <td style={{padding:'8px 11px'}}>
+                      {mgr?<div style={{display:'flex',alignItems:'center',gap:5}}><Avatar name={mgr.name} size={18}/><span style={{fontSize:10,color:C.t2}}>{mgr.name.split(' ')[0]}</span></div>:<span style={{fontSize:10,color:C.t3}}>—</span>}
+                    </td>
+                    <td style={{padding:'8px 11px',textAlign:'center'}}><span style={{fontSize:11,fontWeight:700,color:relCount>0?C.teal:C.t3}}>{relCount}</span></td>
+                    <td style={{padding:'8px 11px',fontSize:9,color:C.t3,whiteSpace:'nowrap'}}>{ci.lastSeen}</td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{padding:'8px 12px',borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <span style={{fontSize:10,color:C.t2}}>Showing {Math.min((page-1)*PAGE+1,filtered.length)}–{Math.min(page*PAGE,filtered.length)} of {filtered.length}</span>
+            <div style={{display:'flex',gap:4}}>
+              <Btn variant="outline" size="sm" onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>‹</Btn>
+              {Array.from({length:Math.min(5,totalP)},(_,i)=>{const p=Math.max(1,Math.min(totalP-4,page-2))+i;return p<=totalP?<button key={p} onClick={()=>setPage(p)} style={{width:26,height:26,borderRadius:5,border:`1px solid ${p===page?C.teal:C.border}`,background:p===page?C.teal:'transparent',color:p===page?'#fff':C.t2,fontSize:11,cursor:'pointer'}}>{p}</button>:null;})}
+              <Btn variant="outline" size="sm" onClick={()=>setPage(p=>Math.min(totalP,p+1))} disabled={page>=totalP}>›</Btn>
+            </div>
+          </div>
+        </div>
+      </>}
+    </div>
+
+    {/* Detail panel */}
+    {selected&&<div style={{width:480,flexShrink:0,background:C.card,display:'flex',flexDirection:'column',animation:'slideIn .2s ease',borderLeft:`1px solid ${C.border}`}}>
+      <CIDetail ci={selected}/>
+    </div>}
+
+    <Modal open={showNew} title="Register Configuration Item" onClose={()=>setSN(false)} width={640}>
+      <AddCIForm/>
+    </Modal>
+  </div>;
+};
+
+// ─── MODULE SHELL ─────────────────────────────────
+const Shell=({module})=>{
+  const M={incidents:{t:'Incident Management',icon:'🚨',color:C.danger,pt:'Part 3 ✓'},service_req:{t:'Service Request Management',icon:'📋',color:C.success,pt:'Part 3 ✓'},imac:{t:'IMAC Module',icon:'🔄',color:C.primary,pt:'Part 2 ✓'},problems:{t:'Problem Management',icon:'🔍',color:C.warning,pt:'Part 4 ✓'},changes:{t:'Change Management',icon:'🔧',color:C.purple,pt:'Part 4 ✓'},knowledge:{t:'Knowledge Base',icon:'📚',color:C.success,pt:'Part 6'},sla:{t:'SLA & Escalation',icon:'⏱️',color:C.warning,pt:'Part 6'},employees:{t:'Employee Mgmt',icon:'👥',color:C.primary,pt:'Part 2 ✓'},users:{t:'User Mgmt',icon:'🔐',color:C.primary,pt:'Part 1 ✓'},reports:{t:'Reports',icon:'📊',color:C.purple,pt:'Part 7'}};
+  const c=M[module]||{t:module,icon:'📋',color:C.primary,pt:'Upcoming'};
+  return <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'calc(100vh - 110px)'}}>
+    <div style={{textAlign:'center',maxWidth:400}}>
+      <div style={{width:64,height:64,borderRadius:16,background:`${c.color}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:30,margin:'0 auto 14px'}}>{c.icon}</div>
+      <h2 style={{fontSize:18,fontWeight:800,color:C.t1,margin:'0 0 6px'}}>{c.t}</h2>
+      <div style={{background:`${c.color}0D`,border:`1px dashed ${c.color}60`,borderRadius:8,padding:'10px 14px',display:'inline-flex',alignItems:'center',gap:8}}>
+        <span style={{fontSize:16}}>🔨</span><div><div style={{fontSize:10,fontWeight:800,color:c.color}}>{c.pt}</div><div style={{fontSize:10,color:C.t2}}>Module in scheduled part</div></div>
+      </div>
+    </div>
+  </div>;
+};
+
+// ─── LOGIN ────────────────────────────────────────
+const Login=({onLogin})=>{
+  const[email,setEmail]=useState('');const[pw,setPw]=useState('');const[loading,setL]=useState(false);const[err,setErr]=useState('');const[sel,setSel]=useState(null);
+  const DEMOS=[{r:'SUPER_ADMIN',e:'superadmin@itsm.com',p:'Admin@123'},{r:'ADMIN',e:'admin@itsm.com',p:'Admin@123'},{r:'EMPLOYEE',e:'employee@company.com',p:'Employee@123'},{r:'HELPDESK',e:'helpdesk@company.com',p:'Helpdesk@123'},{r:'AGENT',e:'agent@company.com',p:'Agent@123'},{r:'SERVICE_MANAGER',e:'manager@company.com',p:'Manager@123'}];
+  const fill=d=>{setEmail(d.e);setPw(d.p);setSel(d.r);setErr('');};
+  const sub=e=>{e.preventDefault();if(!email||!pw){setErr('Enter credentials');return;}setL(true);setTimeout(()=>{const u=USERS.find(x=>x.email===email&&x.pw===pw);if(!u){setErr('Invalid credentials');setL(false);return;}onLogin(u);},600);};
+  return <div style={{minHeight:'100vh',display:'flex',background:C.bg}}>
+    <div style={{width:'42%',background:'linear-gradient(150deg,#0D1B2A,#0F2540 60%,#1A3A6C)',display:'flex',flexDirection:'column',justifyContent:'space-between',padding:40,position:'relative',overflow:'hidden'}}>
+      <div style={{position:'absolute',top:-60,left:-60,width:260,height:260,borderRadius:'50%',background:'rgba(13,148,136,0.07)'}}/>
+      <div><div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:36,height:36,borderRadius:8,background:C.teal,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>⚡</div><div><div style={{fontSize:17,fontWeight:800,color:'#fff'}}>ITSM<span style={{color:'#5EEAD4'}}>Pro</span></div><div style={{fontSize:8,color:'#475569',letterSpacing:'0.1em',textTransform:'uppercase'}}>Enterprise Service Mgmt</div></div></div></div>
+      <div>
+        <div style={{fontSize:10,fontWeight:700,color:C.teal,letterSpacing:'0.1em',marginBottom:6}}>✅ Part 5 Live</div>
+        <h1 style={{fontSize:26,fontWeight:800,color:'#fff',margin:'0 0 10px',lineHeight:1.2}}>Asset & CMDB<br/><span style={{color:'#5EEAD4'}}>Management</span></h1>
+        {['12 CI Types (Hardware/Software/Cloud)','3-Step CI Registration Wizard','Multi-tab CI Detail View','CI Relationship Mapping','Interactive Topology Graph','Software License Seat Tracking','Warranty Expiry Alerts','Linked Incidents/Changes/Problems','Full Audit History per CI','In/Outbound Relationship Traversal'].map((f,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}><div style={{width:14,height:14,borderRadius:'50%',background:'rgba(13,148,136,0.25)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><div style={{width:5,height:5,borderRadius:'50%',background:'#5EEAD4'}}/></div><span style={{fontSize:11,color:'#94A3B8'}}>{f}</span></div>)}
+      </div>
+      <div style={{display:'flex',gap:20,borderTop:'1px solid rgba(255,255,255,0.07)',paddingTop:16}}>{[['15','CIs Registered'],['12','CI Types'],['2','Licenses']].map(([v,l])=><div key={l}><div style={{fontSize:16,fontWeight:800,color:'#fff'}}>{v}</div><div style={{fontSize:10,color:'#475569'}}>{l}</div></div>)}</div>
+    </div>
+    <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:'40px 50px'}}>
+      <div style={{width:'100%',maxWidth:380}}>
+        <h2 style={{fontSize:22,fontWeight:800,color:C.t1,margin:'0 0 4px'}}>Sign In</h2>
+        <p style={{fontSize:12,color:C.t2,margin:'0 0 18px'}}>ITSM Pro — Part 5</p>
+        <div style={{background:'#F8FAFC',border:`1px solid ${C.border}`,borderRadius:8,padding:12,marginBottom:18}}>
+          <p style={{fontSize:9,fontWeight:800,color:C.t3,letterSpacing:'0.1em',textTransform:'uppercase',margin:'0 0 7px'}}>Quick Login</p>
+          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+            {DEMOS.map(d=>{const m=ROLE_META[d.r];const a=sel===d.r;return <button key={d.r} onClick={()=>fill(d)} style={{padding:'3px 8px',borderRadius:20,fontSize:10,fontWeight:700,border:`1px solid ${a?m.color:m.border}`,background:a?m.bg:'#fff',color:a?m.color:C.t2,cursor:'pointer'}}>{m.label}</button>;})}
+          </div>
+        </div>
+        <form onSubmit={sub} style={{display:'flex',flexDirection:'column',gap:11}}>
+          <Input label="Email" type="email" value={email} onChange={setEmail} required placeholder="you@company.com"/>
+          <Input label="Password" type="password" value={pw} onChange={setPw} required placeholder="Password"/>
+          {err&&<div style={{padding:'8px 11px',background:C.dangerLt,border:`1px solid #FECACA`,borderRadius:6,fontSize:12,color:C.danger}}>⚠ {err}</div>}
+          <Btn type="submit" size="lg" disabled={loading} sx={{width:'100%',justifyContent:'center',marginTop:3}}>{loading?'Signing in…':'Sign In →'}</Btn>
+        </form>
+      </div>
+    </div>
+  </div>;
+};
+
+// ─── MAIN APP ─────────────────────────────────────
+function App(){
+  const[user,setUser]=useState(null);
+  const[cis,setCIs]=useState(SEED_CIS);
+  const[active,setActive]=useState('dashboard');
+  const[col,setCol]=useState(false);
+  const[toasts,setToasts]=useState([]);
+  const addToast=(type,msg)=>{const id=Date.now();setToasts(p=>[...p,{id,type,msg}]);setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),4200);};
+  const login=u=>{setUser(u);setActive('dashboard');addToast('success',`Welcome, ${u.name}!`);};
+  const logout=()=>{setUser(null);setActive('dashboard');};
+  if(!user)return <Login onLogin={login}/>;
+  const sw=col?56:228;
+  const render=()=>{
+    if(active==='dashboard')return <Dashboard user={user} cis={cis}/>;
+    if(active==='cmdb')return <CMDBModule me={user} cis={cis} setCIs={setCIs} addToast={addToast}/>;
+    return <Shell module={active}/>;
+  };
+  return <div style={{display:'flex',minHeight:'100vh'}}>
+    <Sidebar user={user} active={active} onNav={m=>setActive(m)} col={col} setCol={setCol}/>
+    <div style={{marginLeft:sw,flex:1,transition:'margin-left .2s',display:'flex',flexDirection:'column',minHeight:'100vh'}}>
+      <Header user={user} active={active} cis={cis} onLogout={logout}/>
+      <main style={{flex:1,overflow:'hidden'}}>{render()}</main>
+    </div>
+    <Toast toasts={toasts} rem={id=>setToasts(p=>p.filter(t=>t.id!==id))}/>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

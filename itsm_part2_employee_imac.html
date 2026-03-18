@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ITSM Pro — Part 2: Employee & IMAC Management</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;background:#F0F4F8;overflow-x:hidden}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:3px}
+input,select,textarea{font-family:inherit}
+@keyframes slideUp{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useMemo,useCallback}=React;
+
+// ══════════════════════════════════════════════════════════
+// ITSM PRO — Part 2: Employee Management + IMAC Module
+// All Free / MIT Licensed — React 18, No paid deps
+// ══════════════════════════════════════════════════════════
+
+const C={
+  sb:'#0D1B2A',sbBorder:'rgba(255,255,255,0.07)',sbText:'#8899AA',
+  sbActive:'rgba(59,130,246,0.12)',sbActiveTxt:'#93C5FD',sbHover:'rgba(255,255,255,0.04)',
+  primary:'#2563EB',primaryH:'#1D4ED8',primaryLt:'#EFF6FF',
+  success:'#059669',successLt:'#ECFDF5',
+  warning:'#D97706',warningLt:'#FFFBEB',
+  danger:'#DC2626',dangerLt:'#FEF2F2',
+  purple:'#7C3AED',purpleLt:'#F5F3FF',
+  cyan:'#0891B2',cyanLt:'#ECFEFF',
+  orange:'#EA580C',orangeLt:'#FFF7ED',
+  bg:'#F0F4F8',card:'#FFFFFF',border:'#E2E8F0',borderFaint:'#F1F5F9',
+  t1:'#0F172A',t2:'#475569',t3:'#94A3B8',
+};
+
+const ROLE_META={
+  SUPER_ADMIN:{label:'Super Admin',color:'#7C3AED',bg:'#F5F3FF',border:'#DDD6FE'},
+  ADMIN:{label:'Admin',color:'#2563EB',bg:'#EFF6FF',border:'#BFDBFE'},
+  EMPLOYEE:{label:'Employee',color:'#059669',bg:'#ECFDF5',border:'#A7F3D0'},
+  HELPDESK:{label:'Helpdesk',color:'#D97706',bg:'#FFFBEB',border:'#FDE68A'},
+  AGENT:{label:'Agent',color:'#0891B2',bg:'#ECFEFF',border:'#A5F3FC'},
+  SERVICE_MANAGER:{label:'Service Mgr',color:'#DC2626',bg:'#FEF2F2',border:'#FECACA'},
+};
+
+const DEPTS=['IT','Finance','HR','Operations','Sales','Marketing','Legal','Engineering'];
+const LOCS=['HQ - New York','Branch A - Chicago','Branch B - LA','Remote','Branch C - Dallas'];
+const IMAC_TYPES=['Install','Move','Add','Change'];
+const IMAC_CATS={
+  Install:['New Laptop/Desktop','New Mobile Device','Software Installation','Peripheral (Monitor/Keyboard/Mouse)','Network Equipment','Server/VM Provisioning','Printer/Scanner'],
+  Move:['Employee Relocation','Asset Relocation','Office/Desk Change','Branch Transfer','Department Transfer'],
+  Add:['Email Account','VPN Access','Application Access','Network Drive','Shared Mailbox','Distribution List','Additional Monitor','Cloud Storage'],
+  Change:['Hardware Upgrade','Software Upgrade','Configuration Change','Password/Access Reset','Role/Permission Change','Network Config Change'],
+};
+const PRIORITY_OPTS=['Low','Medium','High','Critical'];
+
+const genId=pfx=>pfx+'-'+String(Date.now()).slice(-6)+Math.random().toString(36).substr(2,3).toUpperCase();
+const initials=n=>(n||'U').split(' ').map(w=>w[0]||'').join('').toUpperCase().substr(0,2);
+const avatarColor=str=>{const colors=['#2563EB','#7C3AED','#059669','#D97706','#DC2626','#0891B2','#9333EA','#C026D3'];let h=0;for(let c of(str||''))h=c.charCodeAt(0)+h*31;return colors[Math.abs(h)%colors.length];};
+const now=()=>new Date().toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const today=()=>new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const validateEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+const validatePw=p=>/^(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{6,}$/.test(p);
+
+// ─── SEED DATA ────────────────────────────────────
+const SEED_USERS=[
+  {id:'u1',name:'Alex Morgan',email:'superadmin@itsm.com',pw:'Admin@123',role:'SUPER_ADMIN',dept:'IT',title:'CIO / System Administrator',phone:'+1-555-0100',loc:'HQ - New York',mgr:null,status:'active',joined:'Jan 1, 2024',lastLogin:'Today 8:30 AM',empId:'EMP-001',doj:'Jan 1, 2024',dob:'Mar 15, 1980',blood:'O+',emergency:'Jane Morgan - +1-555-9100',skills:'Infrastructure, Cloud, Security',certifications:'ITIL v4, CISSP',bio:'CIO overseeing all IT operations.',probation:false,contractType:'Permanent'},
+  {id:'u2',name:'Sarah Chen',email:'admin@itsm.com',pw:'Admin@123',role:'ADMIN',dept:'IT',title:'IT Manager',phone:'+1-555-0101',loc:'HQ - New York',mgr:'u1',status:'active',joined:'Jan 15, 2024',lastLogin:'Today 9:00 AM',empId:'EMP-002',doj:'Jan 15, 2024',dob:'Jun 20, 1985',blood:'A+',emergency:'Tom Chen - +1-555-9101',skills:'ITSM, Project Management',certifications:'PMP, ITIL',bio:'Manages IT operations and team.',probation:false,contractType:'Permanent'},
+  {id:'u3',name:'James Wilson',email:'employee@company.com',pw:'Employee@123',role:'EMPLOYEE',dept:'Finance',title:'Finance Analyst',phone:'+1-555-0102',loc:'Branch A - Chicago',mgr:'u7',status:'active',joined:'Feb 1, 2024',lastLogin:'Yesterday 10:00 AM',empId:'EMP-003',doj:'Feb 1, 2024',dob:'Aug 5, 1990',blood:'B+',emergency:'Sue Wilson - +1-555-9102',skills:'Excel, SAP, Financial Analysis',certifications:'CFA Level 1',bio:'Financial analyst in Chicago office.',probation:false,contractType:'Permanent'},
+  {id:'u4',name:'Priya Sharma',email:'helpdesk@company.com',pw:'Helpdesk@123',role:'HELPDESK',dept:'IT',title:'Help Desk Analyst',phone:'+1-555-0103',loc:'HQ - New York',mgr:'u2',status:'active',joined:'Feb 10, 2024',lastLogin:'Today 7:45 AM',empId:'EMP-004',doj:'Feb 10, 2024',dob:'Dec 12, 1992',blood:'AB+',emergency:'Raj Sharma - +1-555-9103',skills:'ITSM, Customer Support, ServiceNow',certifications:'ITIL Foundation',bio:'Front-line IT support specialist.',probation:false,contractType:'Permanent'},
+  {id:'u5',name:'David Lee',email:'agent@company.com',pw:'Agent@123',role:'AGENT',dept:'IT',title:'IT Support Specialist',phone:'+1-555-0104',loc:'HQ - New York',mgr:'u4',status:'active',joined:'Mar 1, 2024',lastLogin:'Today 8:15 AM',empId:'EMP-005',doj:'Mar 1, 2024',dob:'Feb 28, 1995',blood:'O-',emergency:'Lisa Lee - +1-555-9104',skills:'Windows, Networking, Hardware',certifications:'CompTIA A+',bio:'IT support for NYC office.',probation:true,contractType:'Permanent'},
+  {id:'u6',name:'Maria Garcia',email:'manager@company.com',pw:'Manager@123',role:'SERVICE_MANAGER',dept:'IT',title:'IT Service Manager',phone:'+1-555-0105',loc:'HQ - New York',mgr:'u1',status:'active',joined:'Jan 20, 2024',lastLogin:'Today 9:30 AM',empId:'EMP-006',doj:'Jan 20, 2024',dob:'Apr 10, 1983',blood:'A-',emergency:'Carlos Garcia - +1-555-9105',skills:'Service Management, SLA, ITIL',certifications:'ITIL Expert, ISO 20000',bio:'Oversees all IT service delivery.',probation:false,contractType:'Permanent'},
+  {id:'u7',name:'Robert Kim',email:'rkim@company.com',pw:'Pass@123',role:'EMPLOYEE',dept:'Finance',title:'Finance Manager',phone:'+1-555-0106',loc:'Branch A - Chicago',mgr:'u2',status:'active',joined:'Mar 15, 2024',lastLogin:'Mar 12, 2025',empId:'EMP-007',doj:'Mar 15, 2024',dob:'Nov 3, 1981',blood:'B-',emergency:'Min Kim - +1-555-9106',skills:'Financial Planning, Team Management',certifications:'CPA',bio:'Finance department manager Chicago.',probation:false,contractType:'Permanent'},
+  {id:'u8',name:'Emily Brown',email:'ebrown@company.com',pw:'Pass@123',role:'AGENT',dept:'IT',title:'Network Engineer',phone:'+1-555-0107',loc:'HQ - New York',mgr:'u6',status:'inactive',joined:'Apr 1, 2024',lastLogin:'Mar 10, 2025',empId:'EMP-008',doj:'Apr 1, 2024',dob:'Jul 22, 1993',blood:'O+',emergency:'Dan Brown - +1-555-9107',skills:'Cisco, Network Design, Firewall',certifications:'CCNA, CCNP',bio:'Senior network engineer.',probation:false,contractType:'Contract'},
+  {id:'u9',name:'Kevin Patel',email:'kpatel@company.com',pw:'Pass@123',role:'EMPLOYEE',dept:'HR',title:'HR Specialist',phone:'+1-555-0108',loc:'HQ - New York',mgr:'u2',status:'active',joined:'Apr 15, 2024',lastLogin:'Mar 13, 2025',empId:'EMP-009',doj:'Apr 15, 2024',dob:'Sep 14, 1994',blood:'A+',emergency:'Anita Patel - +1-555-9108',skills:'Recruitment, HRIS, Training',certifications:'PHR',bio:'HR operations and recruitment.',probation:false,contractType:'Permanent'},
+  {id:'u10',name:'Lisa Zhang',email:'lzhang@company.com',pw:'Pass@123',role:'EMPLOYEE',dept:'Engineering',title:'Software Engineer',phone:'+1-555-0109',loc:'Branch B - LA',mgr:'u6',status:'active',joined:'May 1, 2024',lastLogin:'Mar 14, 2025',empId:'EMP-010',doj:'May 1, 2024',dob:'Jan 30, 1997',blood:'B+',emergency:'Wei Zhang - +1-555-9109',skills:'React, Node.js, Python',certifications:'AWS Developer',bio:'Full-stack developer in LA.',probation:true,contractType:'Permanent'},
+];
+
+const SEED_IMAC=[
+  {id:'IMAC-000001',type:'Install',category:'New Laptop/Desktop',title:'New MacBook Pro for onboarding',desc:'New hire John Doe joining Finance dept needs a MacBook Pro 14" with standard software stack.',priority:'High',status:'L2 Approved',reqBy:'u3',reqDate:'Mar 10, 2025',targetDate:'Mar 20, 2025',asset:'MacBook Pro 14" (Apple M3)',justification:'New employee joining on Mar 20. Required for day-1 productivity.',approvals:[
+    {level:1,approver:'u7',status:'Approved',comment:'Approved. New hire confirmed by HR.',date:'Mar 11, 2025 10:00 AM'},
+    {level:2,approver:'u2',status:'Approved',comment:'Approved. Within budget allocation.',date:'Mar 12, 2025 2:00 PM'},
+    {level:3,approver:'u6',status:'Pending',comment:'',date:''},
+  ],history:[{action:'Submitted',by:'u3',at:'Mar 10, 2025 9:00 AM',note:'Request submitted'},{action:'L1 Approved',by:'u7',at:'Mar 11, 2025 10:00 AM',note:'Approved by Manager'},{action:'L2 Approved',by:'u2',at:'Mar 12, 2025 2:00 PM',note:'Approved by IT Manager'}]},
+  {id:'IMAC-000002',type:'Add',category:'VPN Access',title:'VPN access for remote work',desc:'Requesting VPN access to company network for remote work from home.',priority:'Medium',status:'Approved',reqBy:'u10',reqDate:'Mar 8, 2025',targetDate:'Mar 15, 2025',asset:'Cisco AnyConnect VPN',justification:'Working remotely 3 days/week. Need secure access to internal systems.',approvals:[
+    {level:1,approver:'u6',status:'Approved',comment:'Approved for remote work arrangement.',date:'Mar 9, 2025 11:00 AM'},
+    {level:2,approver:'u2',status:'Approved',comment:'Approved. Standard VPN policy applies.',date:'Mar 10, 2025 9:30 AM'},
+    {level:3,approver:'u6',status:'Approved',comment:'IT Service Manager final approval.',date:'Mar 11, 2025 3:00 PM'},
+  ],history:[{action:'Submitted',by:'u10',at:'Mar 8, 2025 4:00 PM',note:'Request submitted'},{action:'L1 Approved',by:'u6',at:'Mar 9, 2025 11:00 AM',note:''},{action:'L2 Approved',by:'u2',at:'Mar 10, 2025 9:30 AM',note:''},{action:'L3 Approved',by:'u6',at:'Mar 11, 2025 3:00 PM',note:''},{action:'Approved',by:'System',at:'Mar 11, 2025 3:01 PM',note:'Auto-approved after all levels complete'}]},
+  {id:'IMAC-000003',type:'Move',category:'Employee Relocation',title:'Desk move to Floor 3',desc:'Relocating from Floor 2, Desk 24 to Floor 3, Desk 12 due to team expansion.',priority:'Low',status:'L1 Pending',reqBy:'u4',reqDate:'Mar 13, 2025',targetDate:'Mar 25, 2025',asset:'Workstation + Peripherals',justification:'Team expanding to Floor 3. Need to move with the team.',approvals:[
+    {level:1,approver:'u2',status:'Pending',comment:'',date:''},
+    {level:2,approver:'u1',status:'Pending',comment:'',date:''},
+    {level:3,approver:'u6',status:'Pending',comment:'',date:''},
+  ],history:[{action:'Submitted',by:'u4',at:'Mar 13, 2025 10:00 AM',note:'Request submitted'}]},
+];
+
+// ─── UI ATOMS ─────────────────────────────────────
+const Avatar=({name='?',size=36,sx={}})=>{
+  const bg=avatarColor(name);
+  return <div style={{width:size,height:size,borderRadius:'50%',background:bg,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:size*.36,fontWeight:700,flexShrink:0,...sx}}>{initials(name)}</div>;
+};
+
+const RoleBadge=({role})=>{const m=ROLE_META[role];if(!m)return null;return <span style={{fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:20,border:`1px solid ${m.border}`,color:m.color,background:m.bg,whiteSpace:'nowrap',letterSpacing:'0.05em',textTransform:'uppercase'}}>{m.label}</span>;};
+
+const StatusPill=({status,size=10})=>{
+  const M={active:{c:C.success,bg:C.successLt,b:'#A7F3D0'},inactive:{c:'#64748B',bg:'#F1F5F9',b:'#CBD5E1'},Submitted:{c:C.primary,bg:C.primaryLt,b:'#BFDBFE'},'L1 Pending':{c:C.warning,bg:C.warningLt,b:'#FDE68A'},'L1 Approved':{c:C.cyan,bg:C.cyanLt,b:'#A5F3FC'},'L2 Pending':{c:C.orange,bg:C.orangeLt,b:'#FED7AA'},'L2 Approved':{c:C.purple,bg:C.purpleLt,b:'#DDD6FE'},'L3 Pending':{c:'#DB2777',bg:'#FDF2F8',b:'#FBCFE8'},Approved:{c:C.success,bg:C.successLt,b:'#A7F3D0'},'In Progress':{c:C.primary,bg:C.primaryLt,b:'#BFDBFE'},Completed:{c:'#64748B',bg:'#F1F5F9',b:'#CBD5E1'},Rejected:{c:C.danger,bg:C.dangerLt,b:'#FECACA'},Cancelled:{c:'#64748B',bg:'#F1F5F9',b:'#CBD5E1'},Draft:{c:C.t3,bg:'#F8FAFC',b:C.border}};
+  const s=M[status]||{c:C.t2,bg:'#F1F5F9',b:C.border};
+  return <span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:size,fontWeight:800,padding:'2px 7px',borderRadius:20,border:`1px solid ${s.b}`,color:s.c,background:s.bg,whiteSpace:'nowrap'}}><span style={{width:5,height:5,borderRadius:'50%',background:s.c,display:'inline-block'}}/>{status}</span>;
+};
+
+const PrioBadge=({p})=>{
+  const m={Critical:{c:C.danger,bg:C.dangerLt},High:{c:C.orange,bg:C.orangeLt},Medium:{c:C.warning,bg:C.warningLt},Low:{c:C.success,bg:C.successLt}};
+  const s=m[p]||m.Medium;
+  return <span style={{fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:4,color:s.c,background:s.bg,textTransform:'uppercase',letterSpacing:'0.05em'}}>{p}</span>;
+};
+
+const Btn=({children,variant='primary',size='md',onClick,disabled,sx={},type='button',icon})=>{
+  const[h,sH]=useState(false);
+  const V={primary:{bg:C.primary,bgh:C.primaryH,text:'#fff',bdr:C.primary},danger:{bg:C.danger,bgh:'#B91C1C',text:'#fff',bdr:C.danger},ghost:{bg:'transparent',bgh:C.primaryLt,text:C.primary,bdr:C.border},success:{bg:C.success,bgh:'#047857',text:'#fff',bdr:C.success},warning:{bg:C.warning,bgh:'#B45309',text:'#fff',bdr:C.warning},outline:{bg:'transparent',bgh:'#F8FAFC',text:C.t2,bdr:C.border}};
+  const v=V[variant]||V.primary;
+  const sz=size==='sm'?{padding:'4px 10px',fontSize:11}:size==='lg'?{padding:'10px 22px',fontSize:14}:{padding:'7px 13px',fontSize:12};
+  return <button type={type} disabled={disabled} onMouseEnter={()=>sH(true)} onMouseLeave={()=>sH(false)} onClick={onClick} style={{background:h&&!disabled?v.bgh:v.bg,color:v.text,border:`1px solid ${v.bdr}`,borderRadius:6,cursor:disabled?'not-allowed':'pointer',opacity:disabled?.6:1,fontWeight:600,display:'inline-flex',alignItems:'center',gap:5,transition:'all .15s',...sz,...sx}}>{icon&&<span style={{fontSize:12}}>{icon}</span>}{children}</button>;
+};
+
+const Input=({label,value,onChange,type='text',placeholder,required,error,disabled,sx={}})=>(
+  <div style={{display:'flex',flexDirection:'column',gap:3,...sx}}>
+    {label&&<label style={{fontSize:10,fontWeight:700,color:C.t2,letterSpacing:'0.04em',textTransform:'uppercase'}}>{label}{required&&<span style={{color:C.danger}}> *</span>}</label>}
+    <input type={type} value={value} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} disabled={disabled}
+      style={{padding:'7px 10px',border:`1px solid ${error?C.danger:C.border}`,borderRadius:6,fontSize:12,color:C.t1,background:disabled?'#F8FAFC':'#fff',outline:'none',width:'100%'}}
+      onFocus={e=>{if(!error)e.target.style.borderColor=C.primary;}} onBlur={e=>e.target.style.borderColor=error?C.danger:C.border;}/>
+    {error&&<span style={{fontSize:10,color:C.danger}}>{error}</span>}
+  </div>
+);
+
+const Select=({label,value,onChange,opts,required,disabled,sx={}})=>(
+  <div style={{display:'flex',flexDirection:'column',gap:3,...sx}}>
+    {label&&<label style={{fontSize:10,fontWeight:700,color:C.t2,letterSpacing:'0.04em',textTransform:'uppercase'}}>{label}{required&&<span style={{color:C.danger}}> *</span>}</label>}
+    <select value={value} onChange={e=>onChange?.(e.target.value)} disabled={disabled}
+      style={{padding:'7px 10px',border:`1px solid ${C.border}`,borderRadius:6,fontSize:12,color:C.t1,background:disabled?'#F8FAFC':'#fff',outline:'none',cursor:'pointer',width:'100%',appearance:'none',backgroundImage:"url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394A3B8' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E\")",backgroundRepeat:'no-repeat',backgroundPosition:'right 10px center',paddingRight:26}}>
+      {opts.map(o=><option key={o.v??o} value={o.v??o}>{o.l??o}</option>)}
+    </select>
+  </div>
+);
+
+const Textarea=({label,value,onChange,rows=3,placeholder,required,sx={}})=>(
+  <div style={{display:'flex',flexDirection:'column',gap:3,...sx}}>
+    {label&&<label style={{fontSize:10,fontWeight:700,color:C.t2,letterSpacing:'0.04em',textTransform:'uppercase'}}>{label}{required&&<span style={{color:C.danger}}> *</span>}</label>}
+    <textarea value={value} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder}
+      style={{padding:'7px 10px',border:`1px solid ${C.border}`,borderRadius:6,fontSize:12,color:C.t1,resize:'vertical',outline:'none',width:'100%'}}
+      onFocus={e=>e.target.style.borderColor=C.primary} onBlur={e=>e.target.style.borderColor=C.border}/>
+  </div>
+);
+
+const Modal=({open,title,onClose,children,width=560})=>{
+  if(!open)return null;
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:'#fff',borderRadius:10,boxShadow:'0 25px 60px rgba(0,0,0,0.25)',width:'100%',maxWidth:width,maxHeight:'92vh',display:'flex',flexDirection:'column',overflow:'hidden',animation:'slideUp .2s ease'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 18px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+        <h3 style={{margin:0,fontSize:14,fontWeight:800,color:C.t1}}>{title}</h3>
+        <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:C.t3,lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:18,overflowY:'auto',flex:1}}>{children}</div>
+    </div>
+  </div>;
+};
+
+const Toast=({toasts,rem})=>(
+  <div style={{position:'fixed',bottom:18,right:18,zIndex:9999,display:'flex',flexDirection:'column',gap:7}}>
+    {toasts.map(t=>{const g=t.type==='success'?{bg:'#ECFDF5',bdr:'#A7F3D0',left:C.success,ic:'✓'}:t.type==='error'?{bg:'#FEF2F2',bdr:'#FECACA',left:C.danger,ic:'✗'}:{bg:'#EFF6FF',bdr:'#BFDBFE',left:C.primary,ic:'ℹ'};
+    return <div key={t.id} onClick={()=>rem(t.id)} style={{background:g.bg,border:`1px solid ${g.bdr}`,borderLeft:`3px solid ${g.left}`,color:g.left,padding:'9px 13px',borderRadius:6,fontSize:12,fontWeight:600,boxShadow:'0 4px 14px rgba(0,0,0,0.1)',display:'flex',alignItems:'center',gap:9,minWidth:260,maxWidth:340,cursor:'pointer',animation:'slideUp .2s ease'}}>
+      <span>{g.ic}</span><span style={{flex:1}}>{t.msg}</span><span style={{opacity:.4}}>×</span>
+    </div>;})}
+  </div>
+);
+
+// ─── NAV & SIDEBAR ────────────────────────────────
+const NAV=[
+  {id:'dashboard',label:'Dashboard',icon:'⊞',g:'Main'},
+  {id:'incidents',label:'Incident Mgmt',icon:'🚨',g:'Tickets'},
+  {id:'service_req',label:'Service Requests',icon:'📋',g:'Tickets'},
+  {id:'imac',label:'IMAC',icon:'🔄',g:'Tickets'},
+  {id:'problems',label:'Problem Mgmt',icon:'🔍',g:'Tickets'},
+  {id:'changes',label:'Change Mgmt',icon:'🔧',g:'Tickets'},
+  {id:'cmdb',label:'Assets & CMDB',icon:'🖥️',g:'Resources'},
+  {id:'knowledge',label:'Knowledge Base',icon:'📚',g:'Resources'},
+  {id:'sla',label:'SLA & Escalation',icon:'⏱️',g:'Management'},
+  {id:'employees',label:'Employee Mgmt',icon:'👥',g:'Management'},
+  {id:'users',label:'User Management',icon:'🔐',g:'Management'},
+  {id:'reports',label:'Reports',icon:'📊',g:'Management'},
+];
+const ROLE_NAV={
+  SUPER_ADMIN:['dashboard','incidents','service_req','imac','problems','changes','cmdb','knowledge','sla','employees','users','reports'],
+  ADMIN:['dashboard','incidents','service_req','imac','problems','changes','cmdb','knowledge','sla','employees','users','reports'],
+  EMPLOYEE:['dashboard','service_req','imac','knowledge'],
+  HELPDESK:['dashboard','incidents','service_req','imac','knowledge','employees'],
+  AGENT:['dashboard','incidents','service_req','imac','problems','knowledge'],
+  SERVICE_MANAGER:['dashboard','incidents','service_req','imac','problems','changes','cmdb','knowledge','sla','employees','reports'],
+};
+
+const Sidebar=({user,active,onNav,col,setCol})=>{
+  const vis=NAV.filter(i=>(ROLE_NAV[user.role]||[]).includes(i.id));
+  const groups=[...new Set(NAV.map(n=>n.g))];
+  return <div style={{width:col?56:230,background:C.sb,display:'flex',flexDirection:'column',height:'100vh',position:'fixed',left:0,top:0,zIndex:100,transition:'width .2s ease',borderRight:`1px solid ${C.sbBorder}`,overflow:'hidden',flexShrink:0}}>
+    <div style={{padding:col?'14px 11px':'14px',borderBottom:`1px solid ${C.sbBorder}`,display:'flex',alignItems:'center',gap:9,flexShrink:0}}>
+      <div style={{width:28,height:28,borderRadius:6,background:C.primary,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>⚡</div>
+      {!col&&<div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:800,color:'#fff'}}>ITSM<span style={{color:'#60A5FA'}}>Pro</span></div><div style={{fontSize:8,color:'#334155',letterSpacing:'0.1em',textTransform:'uppercase'}}>Service Mgmt</div></div>}
+      <button onClick={()=>setCol(!col)} style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',color:'#334155',fontSize:15,flexShrink:0}}>{col?'›':'‹'}</button>
+    </div>
+    <div style={{flex:1,overflowY:'auto',overflowX:'hidden',padding:'6px 0',scrollbarWidth:'none'}}>
+      {groups.map(g=>{
+        const items=vis.filter(i=>i.g===g);if(!items.length)return null;
+        return <div key={g}>
+          {!col&&<div style={{padding:'6px 14px 2px',fontSize:8,fontWeight:800,color:'#1E3A5F',letterSpacing:'0.12em',textTransform:'uppercase'}}>{g}</div>}
+          {items.map(item=>{const isA=active===item.id;
+            return <button key={item.id} onClick={()=>onNav(item.id)} title={col?item.label:''} style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:col?'8px 14px':'7px 14px',background:isA?C.sbActive:'transparent',border:'none',cursor:'pointer',transition:'background .15s',borderLeft:isA?`2px solid ${C.primary}`:'2px solid transparent',justifyContent:col?'center':'flex-start'}}
+              onMouseEnter={e=>{if(!isA)e.currentTarget.style.background=C.sbHover;}} onMouseLeave={e=>{if(!isA)e.currentTarget.style.background='transparent';}}>
+              <span style={{fontSize:14,flexShrink:0}}>{item.icon}</span>
+              {!col&&<span style={{fontSize:11,color:isA?C.sbActiveTxt:C.sbText,fontWeight:isA?700:400,whiteSpace:'nowrap'}}>{item.label}</span>}
+            </button>;
+          })}
+        </div>;
+      })}
+    </div>
+    {!col&&<div style={{padding:'10px 14px',borderTop:`1px solid ${C.sbBorder}`,display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+      <Avatar name={user.name} size={26}/>
+      <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,color:'#CBD5E1',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user.name}</div><div style={{fontSize:8,color:'#334155'}}>{ROLE_META[user.role]?.label}</div></div>
+      <div style={{width:5,height:5,borderRadius:'50%',background:C.success}}/>
+    </div>}
+  </div>;
+};
+
+const Header=({user,active,onLogout,onProfile})=>{
+  const[sm,setSM]=useState(false);
+  const mod=NAV.find(i=>i.id===active);
+  return <div style={{background:'#fff',borderBottom:`1px solid ${C.border}`,padding:'0 18px',display:'flex',alignItems:'center',gap:12,height:50,position:'sticky',top:0,zIndex:50,flexShrink:0}}>
+    <div style={{flex:1,display:'flex',alignItems:'center',gap:5}}>
+      <span style={{fontSize:10,color:C.t3}}>ITSM Pro</span><span style={{fontSize:10,color:C.t3}}>›</span>
+      <span style={{fontSize:12,fontWeight:800,color:C.t1}}>{mod?.label||'Dashboard'}</span>
+      <span style={{fontSize:9,color:C.t3,background:'#F1F5F9',padding:'1px 6px',borderRadius:10,marginLeft:4,fontWeight:700}}>PART 2</span>
+    </div>
+    <div style={{position:'relative'}}>
+      <button onClick={e=>{e.stopPropagation();setSM(!sm);}} style={{background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:7,padding:'3px 6px',borderRadius:6}}>
+        <Avatar name={user.name} size={26}/><div style={{textAlign:'left'}}><div style={{fontSize:11,fontWeight:700,color:C.t1}}>{user.name}</div><div style={{fontSize:9,color:C.t3}}>{ROLE_META[user.role]?.label}</div></div><span style={{fontSize:8,color:C.t3}}>▾</span>
+      </button>
+      {sm&&<div style={{position:'absolute',right:0,top:38,width:190,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:200,overflow:'hidden',animation:'slideUp .15s ease'}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:'10px 13px',borderBottom:`1px solid ${C.border}`}}><div style={{fontSize:11,fontWeight:700,color:C.t1}}>{user.name}</div><div style={{fontSize:10,color:C.t2}}>{user.email}</div><div style={{marginTop:4}}><RoleBadge role={user.role}/></div></div>
+        {[['👤 My Profile',()=>{onProfile();setSM(false);}]].map(([l,fn])=><button key={l} onClick={fn} style={{width:'100%',padding:'8px 13px',background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.t1,textAlign:'left'}} onMouseEnter={e=>e.currentTarget.style.background='#F8FAFC'} onMouseLeave={e=>e.currentTarget.style.background='none'}>{l}</button>)}
+        <div style={{borderTop:`1px solid ${C.border}`}}><button onClick={()=>{setSM(false);onLogout();}} style={{width:'100%',padding:'8px 13px',background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.danger,textAlign:'left'}} onMouseEnter={e=>e.currentTarget.style.background='#FEF2F2'} onMouseLeave={e=>e.currentTarget.style.background='none'}>🚪 Sign Out</button></div>
+      </div>}
+    </div>
+  </div>;
+};
+
+// ─── DASHBOARD ────────────────────────────────────
+const Dashboard=({user,users,imacList})=>{
+  const myImac=imacList.filter(i=>i.reqBy===user.id);
+  const pending=imacList.filter(i=>(i.approvals||[]).some(a=>a.approver===user.id&&a.status==='Pending'));
+  const deptCount=DEPTS.reduce((a,d)=>({...a,[d]:users.filter(u=>u.dept===d&&u.status==='active').length}),{});
+  const topDepts=Object.entries(deptCount).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,4);
+  const cards=user.role==='EMPLOYEE'?[
+    {l:'My IMAC Requests',v:myImac.length,ic:'🔄',c:C.primary},
+    {l:'Pending Approval',v:myImac.filter(i=>['L1 Pending','L2 Pending','L3 Pending'].includes(i.status)).length,ic:'⏳',c:C.warning},
+    {l:'Approved',v:myImac.filter(i=>i.status==='Approved'||i.status==='Completed').length,ic:'✅',c:C.success},
+    {l:'Rejected',v:myImac.filter(i=>i.status==='Rejected').length,ic:'✗',c:C.danger},
+  ]:[
+    {l:'Total Employees',v:users.filter(u=>u.status==='active').length,ic:'👥',c:C.primary},
+    {l:'IMAC Requests',v:imacList.length,ic:'🔄',c:C.cyan},
+    {l:'Awaiting My Approval',v:pending.length,ic:'⏳',c:C.warning},
+    {l:'Completed This Month',v:imacList.filter(i=>i.status==='Completed').length,ic:'✅',c:C.success},
+    {l:'Depts Active',v:Object.values(deptCount).filter(v=>v>0).length,ic:'🏢',c:C.purple},
+    {l:'On Probation',v:users.filter(u=>u.probation&&u.status==='active').length,ic:'🔔',c:C.warning},
+  ];
+  return <div style={{padding:'18px 20px',maxWidth:1200}}>
+    <div style={{marginBottom:16}}>
+      <h1 style={{fontSize:18,fontWeight:800,color:C.t1,margin:'0 0 3px'}}>Dashboard — {ROLE_META[user.role]?.label}</h1>
+      <p style={{fontSize:11,color:C.t2,margin:0}}>{today()} · Welcome back, {user.name.split(' ')[0]}</p>
+    </div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(170px,1fr))',gap:11,marginBottom:16}}>
+      {cards.map((s,i)=><div key={i} style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:14}}>
+        <div style={{width:34,height:34,borderRadius:7,background:`${s.c}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,marginBottom:10}}>{s.ic}</div>
+        <div style={{fontSize:22,fontWeight:800,color:C.t1,lineHeight:1}}>{s.v}</div>
+        <div style={{fontSize:11,color:C.t2,marginTop:2}}>{s.l}</div>
+      </div>)}
+    </div>
+    {user.role!=='EMPLOYEE'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+      <div style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:14}}>
+        <div style={{fontSize:12,fontWeight:800,color:C.t1,marginBottom:12}}>Employees by Department</div>
+        {topDepts.map(([dept,cnt])=><div key={dept} style={{marginBottom:10}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:11,color:C.t2}}>{dept}</span><span style={{fontSize:11,fontWeight:700,color:C.t1}}>{cnt}</span></div>
+          <div style={{height:5,background:'#F1F5F9',borderRadius:3}}><div style={{height:5,borderRadius:3,background:C.primary,width:`${Math.min(100,cnt/users.length*100*3)}%`,transition:'width .5s'}}/></div>
+        </div>)}
+      </div>
+      <div style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:14}}>
+        <div style={{fontSize:12,fontWeight:800,color:C.t1,marginBottom:12}}>IMAC Request Status</div>
+        {['L1 Pending','L2 Pending','L3 Pending','Approved','Completed','Rejected'].map(s=>{const cnt=imacList.filter(i=>i.status===s).length;if(!cnt)return null;return <div key={s} style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+          <StatusPill status={s} size={10}/><span style={{fontSize:11,fontWeight:700,color:C.t1}}>{cnt}</span>
+        </div>;})}
+        {pending.length>0&&<div style={{marginTop:10,padding:'9px',background:C.warningLt,borderRadius:6,border:`1px solid #FDE68A`}}><span style={{fontSize:11,fontWeight:700,color:C.warning}}>⚠ {pending.length} request{pending.length>1?'s':''} awaiting your approval</span></div>}
+      </div>
+    </div>}
+  </div>;
+};
+
+// ══════════════════════════════════════════════════════════
+// EMPLOYEE MANAGEMENT MODULE
+// ══════════════════════════════════════════════════════════
+const EmployeeModule=({me,users,setUsers,addToast})=>{
+  const[tab,setTab]=useState('directory');
+  const[search,setSearch]=useState('');
+  const[fDept,setFD]=useState('');
+  const[fRole,setFR]=useState('');
+  const[fStatus,setFS]=useState('');
+  const[viewEmp,setVE]=useState(null);
+  const[editEmp,setEE]=useState(null);
+  const[showOB,setSO]=useState(false);
+  const[obStep,setOBS]=useState(1);
+  const[obData,setOBD]=useState({name:'',email:'',pw:'',role:'EMPLOYEE',dept:'IT',title:'',phone:'',loc:'HQ - New York',mgr:'',dob:'',blood:'O+',emergency:'',skills:'',certifications:'',contractType:'Permanent',doj:today()});
+  const[obErr,setOBE]=useState({});
+
+  const filtered=useMemo(()=>users.filter(u=>{
+    const q=search.toLowerCase();
+    return(!q||u.name.toLowerCase().includes(q)||u.email.toLowerCase().includes(q)||u.empId?.toLowerCase().includes(q)||u.title?.toLowerCase().includes(q))&&(!fDept||u.dept===fDept)&&(!fRole||u.role===fRole)&&(!fStatus||u.status===fStatus);
+  }),[users,search,fDept,fRole,fStatus]);
+
+  const buildTree=(uid,depth=0)=>{const u=users.find(x=>x.id===uid);if(!u)return null;const children=users.filter(x=>x.mgr===uid);return{...u,depth,children:children.map(c=>buildTree(c.id,depth+1))};};
+  const roots=users.filter(u=>!u.mgr||!users.find(x=>x.id===u.mgr));
+  const trees=roots.map(r=>buildTree(r.id));
+
+  const getChain=uid=>{const chain=[];let cur=uid;for(let i=0;i<5;i++){const u=users.find(x=>x.id===cur);if(!u)break;chain.push(u);if(!u.mgr)break;cur=u.mgr;}return chain;};
+
+  const OrgNode=({node})=>{
+    const[open,setOpen]=useState(node.depth<2);
+    const hasKids=node.children&&node.children.length>0;
+    return <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
+      <div style={{display:'flex',flexDirection:'column',alignItems:'center',cursor:'pointer'}} onClick={()=>setVE(node)}>
+        <div style={{background:node.id===me.id?C.primaryLt:C.card,border:`2px solid ${node.id===me.id?C.primary:C.border}`,borderRadius:10,padding:'10px 14px',display:'flex',flexDirection:'column',alignItems:'center',gap:5,width:130,boxShadow:'0 2px 8px rgba(0,0,0,0.06)',transition:'all .15s'}}
+          onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 14px rgba(37,99,235,0.15)';e.currentTarget.style.borderColor=C.primary;}}
+          onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)';e.currentTarget.style.borderColor=node.id===me.id?C.primary:C.border;}}>
+          <Avatar name={node.name} size={36}/>
+          <div style={{fontSize:10,fontWeight:700,color:C.t1,textAlign:'center',lineHeight:1.3,wordBreak:'break-word'}}>{node.name}</div>
+          <div style={{fontSize:9,color:C.t2,textAlign:'center'}}>{node.title}</div>
+          <RoleBadge role={node.role}/>
+        </div>
+        {hasKids&&<button onClick={e=>{e.stopPropagation();setOpen(!open);}} style={{background:open?C.primary:'#F8FAFC',border:`1px solid ${open?C.primary:C.border}`,borderRadius:'50%',width:18,height:18,fontSize:11,cursor:'pointer',color:open?'#fff':C.t2,display:'flex',alignItems:'center',justifyContent:'center',marginTop:4}}>{open?'−':'+'}</button>}
+      </div>
+      {hasKids&&open&&<div style={{display:'flex',gap:12,marginTop:8,position:'relative',paddingTop:8}}>
+        <div style={{position:'absolute',top:0,left:'50%',width:1,height:8,background:C.border}}/>
+        {node.children.map((child,ci)=><div key={child.id} style={{display:'flex',flexDirection:'column',alignItems:'center',position:'relative'}}>
+          <div style={{width:1,height:8,background:C.border}}/>
+          {node.children.length>1&&<div style={{position:'absolute',top:8,left:ci===0?'50%':0,right:ci===node.children.length-1?'50%':0,height:1,background:C.border}}/>}
+          <div style={{marginTop:8}}><OrgNode node={child}/></div>
+        </div>)}
+      </div>}
+    </div>;
+  };
+
+  const validateOB=()=>{const e={};if(!obData.name.trim())e.name='Required';if(!obData.email||!validateEmail(obData.email))e.email='Valid email required';if(!validatePw(obData.pw))e.pw='6+ chars, 1 upper, 1 number';if(users.find(u=>u.email===obData.email))e.email='Email already taken';if(!obData.title.trim())e.title='Required';return e;};
+  const nextOBStep=()=>{if(obStep===1){const e=validateOB();if(Object.keys(e).length){setOBE(e);return;}}if(obStep<3)setOBS(s=>s+1);else{const nu={...obData,id:'u'+Math.random().toString(36).substr(2,8),empId:`EMP-${String(users.length+1).padStart(3,'0')}`,joined:today(),lastLogin:'—',status:'active'};setUsers(p=>[...p,nu]);addToast('success',`${nu.name} onboarded successfully!`);setSO(false);setOBS(1);}};
+  const ff=k=>v=>setOBD(p=>({...p,[k]:v}));
+  const roleOpts=Object.entries(ROLE_META).map(([v,m])=>({v,l:m.label}));
+
+  return <div style={{padding:'18px 20px',maxWidth:1200}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+      <div><h2 style={{fontSize:18,fontWeight:800,color:C.t1,margin:'0 0 2px'}}>Employee Management</h2><p style={{fontSize:11,color:C.t2,margin:0}}>{users.filter(u=>u.status==='active').length} active employees across {[...new Set(users.map(u=>u.dept))].length} departments</p></div>
+      {(me.role==='SUPER_ADMIN'||me.role==='ADMIN')&&<Btn icon="👤" onClick={()=>{setSO(true);setOBS(1);setOBD({name:'',email:'',pw:'',role:'EMPLOYEE',dept:'IT',title:'',phone:'',loc:'HQ - New York',mgr:'',dob:'',blood:'O+',emergency:'',skills:'',certifications:'',contractType:'Permanent',doj:today()});setOBE({});}}>Onboard Employee</Btn>}
+    </div>
+
+    <div style={{display:'flex',gap:0,marginBottom:14,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:4,width:'fit-content'}}>
+      {[['directory','📋 Directory'],['orgchart','🌳 Org Chart'],['departments','🏢 Departments']].map(([v,l])=><button key={v} onClick={()=>setTab(v)} style={{padding:'6px 14px',borderRadius:6,border:'none',background:tab===v?C.primary:'transparent',color:tab===v?'#fff':C.t2,fontSize:11,fontWeight:tab===v?700:400,cursor:'pointer',transition:'all .15s'}}>{l}</button>)}
+    </div>
+
+    {tab==='directory'&&<>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:10,marginBottom:12,display:'flex',gap:8,flexWrap:'wrap'}}>
+        <div style={{flex:1,minWidth:180}}><Input placeholder="Search name, email, ID…" value={search} onChange={v=>setSearch(v)}/></div>
+        <Select value={fDept} onChange={setFD} opts={[{v:'',l:'All Depts'},...DEPTS.map(d=>({v:d,l:d}))]} sx={{minWidth:140}}/>
+        <Select value={fRole} onChange={setFR} opts={[{v:'',l:'All Roles'},...roleOpts]} sx={{minWidth:140}}/>
+        <Select value={fStatus} onChange={setFS} opts={[{v:'',l:'All Status'},{v:'active',l:'Active'},{v:'inactive',l:'Inactive'}]} sx={{minWidth:120}}/>
+        {(search||fDept||fRole||fStatus)&&<Btn variant="outline" size="sm" onClick={()=>{setSearch('');setFD('');setFR('');setFS('');}}>Clear ×</Btn>}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:10}}>
+        {filtered.length===0&&<div style={{gridColumn:'1/-1',padding:40,textAlign:'center',color:C.t3}}>No employees found</div>}
+        {filtered.map(u=><div key={u.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:14,display:'flex',gap:12,cursor:'pointer',transition:'all .15s'}}
+          onClick={()=>setVE(u)}
+          onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 3px 10px rgba(0,0,0,0.08)';e.currentTarget.style.borderColor=C.primary;}}
+          onMouseLeave={e=>{e.currentTarget.style.boxShadow='none';e.currentTarget.style.borderColor=C.border;}}>
+          <Avatar name={u.name} size={44}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+              <span style={{fontSize:13,fontWeight:800,color:C.t1}}>{u.name}</span>
+              {u.id===me.id&&<span style={{fontSize:9,color:C.t3,background:'#F1F5F9',padding:'1px 5px',borderRadius:10}}>you</span>}
+              {u.probation&&<span style={{fontSize:9,color:C.warning,background:C.warningLt,padding:'1px 5px',borderRadius:10,fontWeight:700}}>Probation</span>}
+            </div>
+            <div style={{fontSize:11,color:C.t2,margin:'2px 0'}}>{u.title} · {u.dept}</div>
+            <div style={{fontSize:10,color:C.t3,margin:'1px 0'}}>{u.empId} · {u.loc}</div>
+            <div style={{display:'flex',gap:5,marginTop:5,flexWrap:'wrap'}}><RoleBadge role={u.role}/><StatusPill status={u.status}/>{u.contractType&&u.contractType!=='Permanent'&&<span style={{fontSize:9,fontWeight:700,color:C.orange,background:C.orangeLt,padding:'2px 6px',borderRadius:10}}>{u.contractType}</span>}</div>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:5,alignItems:'flex-end',flexShrink:0}}>
+            <Btn size="sm" onClick={e=>{e.stopPropagation();setEE(u);}}>Edit</Btn>
+            <button onClick={e=>{e.stopPropagation();setUsers(p=>p.map(x=>x.id===u.id?{...x,status:x.status==='active'?'inactive':'active'}:x));addToast('success',`${u.name} ${u.status==='active'?'deactivated':'activated'}`);}} style={{padding:'4px 9px',border:`1px solid ${C.border}`,borderRadius:5,background:'none',cursor:'pointer',fontSize:11,color:u.status==='active'?C.warning:C.success,fontWeight:600}}>{u.status==='active'?'Deactivate':'Activate'}</button>
+          </div>
+        </div>)}
+      </div>
+    </>}
+
+    {tab==='orgchart'&&<div style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:20,overflowX:'auto'}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.t1,marginBottom:14}}>Organization Hierarchy <span style={{fontSize:10,color:C.t3,fontWeight:400}}>— Click any node to view profile</span></div>
+      <div style={{overflowX:'auto',display:'flex',justifyContent:'center',paddingBottom:16}}>
+        <div style={{display:'flex',gap:24,flexWrap:'wrap',justifyContent:'center'}}>
+          {trees.map(t=><OrgNode key={t.id} node={t}/>)}
+        </div>
+      </div>
+    </div>}
+
+    {tab==='departments'&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+      {DEPTS.map(dept=>{
+        const emps=users.filter(u=>u.dept===dept&&u.status==='active');
+        const roles=[...new Set(emps.map(u=>u.role))];
+        if(!emps.length)return null;
+        return <div key={dept} style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,padding:14,cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>e.currentTarget.style.boxShadow='0 3px 10px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <div style={{fontSize:14,fontWeight:800,color:C.t1}}>{dept}</div>
+            <span style={{fontSize:22,fontWeight:800,color:C.primary}}>{emps.length}</span>
+          </div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8}}>{roles.map(r=><RoleBadge key={r} role={r}/>)}</div>
+          <div style={{display:'flex',gap:-6}}>
+            {emps.slice(0,5).map((e,i)=><div key={e.id} style={{marginLeft:i>0?-8:0,position:'relative',zIndex:5-i}}><Avatar name={e.name} size={22} sx={{border:'2px solid #fff'}}/></div>)}
+            {emps.length>5&&<div style={{width:22,height:22,borderRadius:'50%',background:'#F1F5F9',border:'2px solid #fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:C.t2,fontWeight:700,marginLeft:-8}}>+{emps.length-5}</div>}
+          </div>
+        </div>;
+      })}
+    </div>}
+
+    {/* Employee Detail Modal */}
+    <Modal open={!!viewEmp} title="Employee Profile" onClose={()=>setVE(null)} width={560}>
+      {viewEmp&&(()=>{
+        const chain=getChain(viewEmp.id);
+        const directReports=users.filter(u=>u.mgr===viewEmp.id);
+        return <div>
+          <div style={{background:'linear-gradient(135deg,#0D1B2A,#1E3A6C)',borderRadius:8,height:56,marginBottom:-28,position:'relative'}}/>
+          <div style={{padding:'0 16px 16px'}}>
+            <div style={{display:'flex',alignItems:'flex-end',gap:12,marginBottom:14}}>
+              <Avatar name={viewEmp.name} size={56} sx={{border:'3px solid #fff',boxShadow:'0 2px 8px rgba(0,0,0,0.15)'}}/>
+              <div style={{paddingBottom:4,flex:1}}>
+                <div style={{fontSize:16,fontWeight:800,color:C.t1}}>{viewEmp.name}</div>
+                <div style={{fontSize:11,color:C.t2,marginTop:1}}>{viewEmp.title} · {viewEmp.dept}</div>
+                <div style={{display:'flex',gap:5,marginTop:4,flexWrap:'wrap'}}><RoleBadge role={viewEmp.role}/><StatusPill status={viewEmp.status}/></div>
+              </div>
+              {(me.role==='SUPER_ADMIN'||me.role==='ADMIN')&&<Btn size="sm" onClick={()=>{setEE(viewEmp);setVE(null);}}>✏️ Edit</Btn>}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+              {[['🆔 Emp ID',viewEmp.empId],['📧 Email',viewEmp.email],['📞 Phone',viewEmp.phone||'—'],['📍 Location',viewEmp.loc],['🎂 DOB',viewEmp.dob||'—'],['🩸 Blood',viewEmp.blood||'—'],['📅 DOJ',viewEmp.doj||viewEmp.joined],['📑 Contract',viewEmp.contractType||'Permanent']].map(([k,v])=>(
+                <div key={k} style={{background:'#F8FAFC',borderRadius:6,padding:'7px 10px'}}><div style={{fontSize:9,color:C.t3,marginBottom:2}}>{k}</div><div style={{fontSize:11,fontWeight:600,color:C.t1,wordBreak:'break-all'}}>{v}</div></div>
+              ))}
+            </div>
+            {viewEmp.bio&&<div style={{marginBottom:10,background:'#F8FAFC',borderRadius:6,padding:'9px 11px'}}><div style={{fontSize:9,color:C.t3,marginBottom:3}}>BIO</div><div style={{fontSize:11,color:C.t2,lineHeight:1.6}}>{viewEmp.bio}</div></div>}
+            {(viewEmp.skills||viewEmp.certifications)&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+              {viewEmp.skills&&<div style={{background:'#F8FAFC',borderRadius:6,padding:'7px 10px'}}><div style={{fontSize:9,color:C.t3,marginBottom:3}}>SKILLS</div><div style={{fontSize:11,color:C.t1}}>{viewEmp.skills}</div></div>}
+              {viewEmp.certifications&&<div style={{background:'#F8FAFC',borderRadius:6,padding:'7px 10px'}}><div style={{fontSize:9,color:C.t3,marginBottom:3}}>CERTIFICATIONS</div><div style={{fontSize:11,color:C.t1}}>{viewEmp.certifications}</div></div>}
+            </div>}
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.t2,marginBottom:6}}>REPORTING CHAIN</div>
+              <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
+                {chain.map((u,i)=><React.Fragment key={u.id}>{i>0&&<span style={{color:C.t3,fontSize:12}}>←</span>}<div style={{display:'flex',alignItems:'center',gap:5,background:u.id===viewEmp.id?C.primaryLt:'#F8FAFC',border:`1px solid ${u.id===viewEmp.id?C.primary:C.border}`,borderRadius:6,padding:'4px 8px'}}><Avatar name={u.name} size={18}/><span style={{fontSize:10,color:u.id===viewEmp.id?C.primary:C.t1,fontWeight:u.id===viewEmp.id?700:400}}>{u.name.split(' ')[0]}</span></div></React.Fragment>)}
+              </div>
+            </div>
+            {directReports.length>0&&<div>
+              <div style={{fontSize:10,fontWeight:700,color:C.t2,marginBottom:6}}>DIRECT REPORTS ({directReports.length})</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                {directReports.map(r=><div key={r.id} style={{display:'flex',alignItems:'center',gap:5,background:'#F8FAFC',borderRadius:6,padding:'4px 8px',cursor:'pointer',border:`1px solid ${C.border}`}} onClick={()=>setVE(r)}>
+                  <Avatar name={r.name} size={18}/><span style={{fontSize:10,color:C.t1}}>{r.name.split(' ')[0]}</span>
+                </div>)}
+              </div>
+            </div>}
+            {viewEmp.emergency&&<div style={{marginTop:10,padding:'8px 10px',background:'#FFF7ED',borderRadius:6,border:'1px solid #FED7AA'}}><div style={{fontSize:9,color:C.orange,fontWeight:700,marginBottom:2}}>🚨 EMERGENCY CONTACT</div><div style={{fontSize:11,color:C.t1}}>{viewEmp.emergency}</div></div>}
+          </div>
+        </div>;
+      })()}
+    </Modal>
+
+    {/* Edit Employee Modal */}
+    <Modal open={!!editEmp} title={`Edit: ${editEmp?.name||''}`} onClose={()=>setEE(null)} width={540}>
+      {editEmp&&<EditEmpForm emp={editEmp} users={users} onSave={data=>{setUsers(p=>p.map(u=>u.id===editEmp.id?{...u,...data}:u));addToast('success',`${editEmp.name} updated`);setEE(null);}} onClose={()=>setEE(null)}/>}
+    </Modal>
+
+    {/* Onboarding Wizard Modal */}
+    <Modal open={showOB} title={`Employee Onboarding — Step ${obStep} of 3`} onClose={()=>setSO(false)} width={560}>
+      <div style={{display:'flex',gap:0,marginBottom:16}}>
+        {['Personal Info','Role & Access','Additional Info'].map((s,i)=><div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+          <div style={{width:26,height:26,borderRadius:'50%',background:obStep>i+1?C.success:obStep===i+1?C.primary:'#E2E8F0',color:obStep>=i+1?'#fff':C.t3,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>{obStep>i+1?'✓':i+1}</div>
+          <div style={{fontSize:9,color:obStep===i+1?C.primary:C.t3,fontWeight:obStep===i+1?700:400,textAlign:'center'}}>{s}</div>
+        </div>)}
+      </div>
+      {obStep===1&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <Input label="Full Name" value={obData.name} onChange={ff('name')} required error={obErr.name} sx={{gridColumn:'1/-1'}}/>
+        <Input label="Email" type="email" value={obData.email} onChange={ff('email')} required error={obErr.email}/>
+        <Input label="Password" type="password" value={obData.pw} onChange={ff('pw')} required error={obErr.pw} placeholder="6+ chars, 1 upper, 1 num"/>
+        <Input label="Designation" value={obData.title} onChange={ff('title')} required error={obErr.title} sx={{gridColumn:'1/-1'}}/>
+        <Input label="Phone" value={obData.phone} onChange={ff('phone')}/>
+        <Input label="Date of Birth" type="date" value={obData.dob} onChange={ff('dob')}/>
+        <Select label="Blood Group" value={obData.blood} onChange={ff('blood')} opts={['O+','O-','A+','A-','B+','B-','AB+','AB-'].map(b=>({v:b,l:b}))}/>
+        <Input label="Emergency Contact" value={obData.emergency} onChange={ff('emergency')} placeholder="Name - Phone"/>
+      </div>}
+      {obStep===2&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <Select label="Role" value={obData.role} onChange={ff('role')} opts={roleOpts} required/>
+        <Select label="Department" value={obData.dept} onChange={ff('dept')} opts={DEPTS.map(d=>({v:d,l:d}))} required/>
+        <Select label="Location" value={obData.loc} onChange={ff('loc')} opts={LOCS.map(l=>({v:l,l:l}))}/>
+        <Select label="Contract Type" value={obData.contractType} onChange={ff('contractType')} opts={['Permanent','Contract','Internship','Part-time'].map(c=>({v:c,l:c}))}/>
+        <Select label="Reporting Manager" value={obData.mgr} onChange={ff('mgr')} opts={[{v:'',l:'— No Manager —'},...users.map(u=>({v:u.id,l:`${u.name} (${u.title})`}))]} sx={{gridColumn:'1/-1'}}/>
+        <Input label="Date of Joining" type="date" value={obData.doj} onChange={ff('doj')} sx={{gridColumn:'1/-1'}}/>
+      </div>}
+      {obStep===3&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
+        <Textarea label="Bio / Summary" value={obData.bio||''} onChange={ff('bio')} rows={2} placeholder="Brief professional background…"/>
+        <Input label="Skills" value={obData.skills} onChange={ff('skills')} placeholder="e.g. Python, Excel, Project Mgmt"/>
+        <Input label="Certifications" value={obData.certifications} onChange={ff('certifications')} placeholder="e.g. ITIL, PMP, AWS"/>
+        <div style={{background:'#ECFDF5',border:'1px solid #A7F3D0',borderRadius:6,padding:12}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.success,marginBottom:6}}>✓ Ready to Onboard</div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:8}}>
+            <span style={{fontSize:11,color:C.t1}}><strong>{obData.name||'—'}</strong></span>
+            <span style={{fontSize:11,color:C.t2}}>·</span>
+            <span style={{fontSize:11,color:C.t2}}>{obData.dept}</span>
+            <span style={{fontSize:11,color:C.t2}}>·</span>
+            <RoleBadge role={obData.role}/>
+          </div>
+        </div>
+      </div>}
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+        <Btn variant="outline" onClick={obStep===1?()=>setSO(false):()=>setOBS(s=>s-1)}>{obStep===1?'Cancel':'← Back'}</Btn>
+        <Btn onClick={nextOBStep}>{obStep<3?'Next →':'🎉 Complete Onboarding'}</Btn>
+      </div>
+    </Modal>
+  </div>;
+};
+
+const EditEmpForm=({emp,users,onSave,onClose})=>{
+  const[d,setD]=useState({name:emp.name,title:emp.title,phone:emp.phone||'',loc:emp.loc,dept:emp.dept,role:emp.role,mgr:emp.mgr||'',status:emp.status,contractType:emp.contractType||'Permanent',skills:emp.skills||'',certifications:emp.certifications||'',bio:emp.bio||'',probation:emp.probation||false,emergency:emp.emergency||''});
+  const ff=k=>v=>setD(p=>({...p,[k]:v}));
+  const roleOpts=Object.entries(ROLE_META).map(([v,m])=>({v,l:m.label}));
+  return <div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+      <Input label="Full Name" value={d.name} onChange={ff('name')} required sx={{gridColumn:'1/-1'}}/>
+      <Input label="Designation" value={d.title} onChange={ff('title')} required/>
+      <Input label="Phone" value={d.phone} onChange={ff('phone')}/>
+      <Select label="Department" value={d.dept} onChange={ff('dept')} opts={DEPTS.map(x=>({v:x,l:x}))}/>
+      <Select label="Role" value={d.role} onChange={ff('role')} opts={roleOpts}/>
+      <Select label="Location" value={d.loc} onChange={ff('loc')} opts={LOCS.map(x=>({v:x,l:x}))}/>
+      <Select label="Manager" value={d.mgr} onChange={ff('mgr')} opts={[{v:'',l:'— None —'},...users.filter(u=>u.id!==emp.id).map(u=>({v:u.id,l:u.name}))]} sx={{gridColumn:'1/-1'}}/>
+      <Select label="Contract" value={d.contractType} onChange={ff('contractType')} opts={['Permanent','Contract','Internship','Part-time'].map(c=>({v:c,l:c}))}/>
+      <Select label="Status" value={d.status} onChange={ff('status')} opts={[{v:'active',l:'Active'},{v:'inactive',l:'Inactive'}]}/>
+      <div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:8}}><input type="checkbox" id="prob" checked={d.probation} onChange={e=>ff('probation')(e.target.checked)}/><label htmlFor="prob" style={{fontSize:12,color:C.t1}}>On Probation</label></div>
+      <Textarea label="Skills" value={d.skills} onChange={ff('skills')} rows={2} sx={{gridColumn:'1/-1'}}/>
+      <Textarea label="Bio" value={d.bio} onChange={ff('bio')} rows={2} sx={{gridColumn:'1/-1'}}/>
+      <Input label="Emergency Contact" value={d.emergency} onChange={ff('emergency')} sx={{gridColumn:'1/-1'}}/>
+    </div>
+    <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+      <Btn variant="outline" onClick={onClose}>Cancel</Btn>
+      <Btn onClick={()=>onSave(d)}>Save Changes</Btn>
+    </div>
+  </div>;
+};
+
+// ══════════════════════════════════════════════════════════
+// IMAC MODULE — 3-Level Approval Workflow
+// ══════════════════════════════════════════════════════════
+const IMACModule=({me,users,imacList,setImacList,addToast})=>{
+  const[tab,setTab]=useState('list');
+  const[showNew,setSN]=useState(false);
+  const[viewReq,setVR]=useState(null);
+  const[search,setSearch]=useState('');
+  const[fType,setFT]=useState('');
+  const[fStatus,setFS]=useState('');
+  const[fPrio,setFP]=useState('');
+
+  const getApprovalChain=reqById=>{
+    const emp=users.find(u=>u.id===reqById);if(!emp)return [];
+    const L1=users.find(u=>u.id===emp.mgr);
+    const L2=L1?users.find(u=>u.id===L1.mgr):null;
+    const L3=users.find(u=>u.role==='SERVICE_MANAGER')||users.find(u=>u.role==='ADMIN')||users.find(u=>u.role==='SUPER_ADMIN');
+    return [L1||{id:'',name:'No L1 Manager'},L2||L1||{id:'',name:'No L2 Manager'},L3||{id:'',name:'No L3 Approver'}];
+  };
+
+  const myPendingApprovals=imacList.filter(req=>(req.approvals||[]).some(a=>a.approver===me.id&&a.status==='Pending'));
+
+  const filtered=useMemo(()=>{
+    let list=imacList;
+    if(me.role==='EMPLOYEE')list=list.filter(r=>r.reqBy===me.id);
+    const q=search.toLowerCase();
+    return list.filter(r=>(!q||r.id.toLowerCase().includes(q)||r.title.toLowerCase().includes(q))&&(!fType||r.type===fType)&&(!fStatus||r.status===fStatus)&&(!fPrio||r.priority===fPrio)).sort((a,b)=>b.id.localeCompare(a.id));
+  },[imacList,search,fType,fStatus,fPrio,me]);
+
+  const handleApprove=(req,level,approve,comment)=>{
+    const updApprovals=req.approvals.map(a=>a.level===level?{...a,status:approve?'Approved':'Rejected',comment,date:now()}:a);
+    let newStatus=req.status;
+    let newHistory=[...req.history,{action:approve?`L${level} Approved`:`L${level} Rejected`,by:me.id,at:now(),note:comment}];
+    if(!approve){newStatus='Rejected';}
+    else{if(level===1)newStatus='L2 Pending';else if(level===2)newStatus='L3 Pending';else if(level===3){newStatus='Approved';newHistory.push({action:'Approved',by:'System',at:now(),note:'All 3 approval levels completed.'});}}
+    setImacList(p=>p.map(r=>r.id===req.id?{...r,approvals:updApprovals,status:newStatus,history:newHistory}:r));
+    setVR(prev=>({...prev,approvals:updApprovals,status:newStatus,history:newHistory}));
+    addToast(approve?'success':'error',`IMAC ${req.id} ${approve?`L${level} Approved`:'Rejected'}`);
+  };
+
+  const IMACForm=()=>{
+    const[form,setForm]=useState({type:'Install',category:'New Laptop/Desktop',title:'',desc:'',priority:'Medium',targetDate:'',asset:'',justification:''});
+    const[errs,setErrs]=useState({});
+    const ff=k=>v=>setForm(p=>({...p,[k]:v,...(k==='type'?{category:IMAC_CATS[v][0]}:{})}));
+    const chain=getApprovalChain(me.id);
+    const submit=()=>{
+      const e={};
+      if(!form.title.trim())e.title='Required';
+      if(!form.desc.trim())e.desc='Required';
+      if(!form.justification.trim())e.justification='Required';
+      if(Object.keys(e).length){setErrs(e);return;}
+      const chain3=getApprovalChain(me.id);
+      const newReq={id:genId('IMAC'),type:form.type,category:form.category,title:form.title,desc:form.desc,priority:form.priority,status:'L1 Pending',reqBy:me.id,reqDate:today(),targetDate:form.targetDate||'Not Set',asset:form.asset,justification:form.justification,
+        approvals:[{level:1,approver:chain3[0]?.id||'',status:'Pending',comment:'',date:''},{level:2,approver:chain3[1]?.id||'',status:'Pending',comment:'',date:''},{level:3,approver:chain3[2]?.id||'',status:'Pending',comment:'',date:''}],
+        history:[{action:'Submitted',by:me.id,at:now(),note:'IMAC request created and submitted for approval.'}]};
+      setImacList(p=>[newReq,...p]);addToast('success',`${newReq.id} submitted — L1 approval pending`);setSN(false);
+    };
+    return <div>
+      <div style={{background:C.primaryLt,border:`1px solid #BFDBFE`,borderRadius:8,padding:11,marginBottom:14}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.primary,marginBottom:6}}>📋 3-Level Approval Chain for Your Request</div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          {chain.map((c,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:6,background:'#fff',border:`1px solid #BFDBFE`,borderRadius:6,padding:'5px 9px'}}>
+            <div style={{width:20,height:20,borderRadius:'50%',background:C.primary,color:'#fff',fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center'}}>L{i+1}</div>
+            <div><div style={{fontSize:11,fontWeight:600,color:C.t1}}>{c.name||'—'}</div><div style={{fontSize:9,color:C.t2}}>{c.title||['Direct Manager','Dept Head','IT Service Mgr'][i]}</div></div>
+          </div>)}
+        </div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <Select label="IMAC Type" value={form.type} onChange={ff('type')} opts={IMAC_TYPES.map(t=>({v:t,l:t}))} required/>
+        <Select label="Category" value={form.category} onChange={ff('category')} opts={(IMAC_CATS[form.type]||[]).map(c=>({v:c,l:c}))} required/>
+        <Input label="Request Title" value={form.title} onChange={ff('title')} required error={errs.title} sx={{gridColumn:'1/-1'}} placeholder="Brief title…"/>
+        <Textarea label="Description" value={form.desc} onChange={ff('desc')} rows={2} required sx={{gridColumn:'1/-1'}} placeholder="Detailed description…"/>
+        <Textarea label="Business Justification" value={form.justification} onChange={ff('justification')} rows={2} required sx={{gridColumn:'1/-1'}} placeholder="Why is this needed?…"/>
+        <Input label="Asset / Item (if known)" value={form.asset} onChange={ff('asset')} placeholder="e.g. Dell Latitude 5540"/>
+        <Select label="Priority" value={form.priority} onChange={ff('priority')} opts={PRIORITY_OPTS.map(p=>({v:p,l:p}))}/>
+        <Input label="Required By Date" type="date" value={form.targetDate} onChange={ff('targetDate')} sx={{gridColumn:'1/-1'}}/>
+      </div>
+      <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+        <Btn variant="outline" onClick={()=>setSN(false)}>Cancel</Btn>
+        <Btn onClick={submit}>🚀 Submit Request</Btn>
+      </div>
+    </div>;
+  };
+
+  const ApprovalPane=({req})=>{
+    const[comment,setComment]=useState('');
+    const[showReject,setShowR]=useState(false);
+    const myApproval=req.approvals.find(a=>a.approver===me.id&&a.status==='Pending');
+    const isServiceMgr=me.role==='SERVICE_MANAGER'||me.role==='SUPER_ADMIN'||me.role==='ADMIN';
+    const canOverride=isServiceMgr&&['L1 Pending','L2 Pending','L3 Pending'].includes(req.status)&&!myApproval;
+    if(!myApproval&&!canOverride)return null;
+    const level=myApproval?.level||(req.status==='L1 Pending'?1:req.status==='L2 Pending'?2:3);
+    return <div style={{background:'#FFFBEB',border:'1px solid #FDE68A',borderRadius:8,padding:14,marginTop:14}}>
+      <div style={{fontSize:12,fontWeight:800,color:C.warning,marginBottom:8}}>{canOverride?'⚡ Service Manager Override':'⏳ Your Approval Required'} — Level {level}</div>
+      <Textarea label="Comments / Notes" value={comment} onChange={setComment} rows={2} placeholder="Add approval comments (required for rejection)…"/>
+      <div style={{display:'flex',gap:8,marginTop:10}}>
+        <Btn variant="success" onClick={()=>handleApprove(req,level,true,comment)}>✓ Approve</Btn>
+        {!showReject?<Btn variant="outline" onClick={()=>setShowR(true)}>✗ Reject</Btn>:<Btn variant="danger" onClick={()=>{if(!comment.trim()){addToast('error','Rejection reason required');return;}handleApprove(req,level,false,comment);}}>✗ Confirm Reject</Btn>}
+      </div>
+    </div>;
+  };
+
+  const TypeIcon={Install:'💿',Move:'📦',Add:'➕',Change:'🔧'};
+
+  return <div style={{padding:'18px 20px',maxWidth:1200}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+      <div><h2 style={{fontSize:18,fontWeight:800,color:C.t1,margin:'0 0 2px'}}>IMAC — Install / Move / Add / Change</h2><p style={{fontSize:11,color:C.t2,margin:0}}>Hardware & software lifecycle requests with 3-level approval workflow</p></div>
+      <Btn icon="+" onClick={()=>setSN(true)}>New IMAC Request</Btn>
+    </div>
+
+    {myPendingApprovals.length>0&&<div style={{background:'#FFFBEB',border:'1px solid #FDE68A',borderRadius:8,padding:12,marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
+      <span style={{fontSize:18}}>⏳</span>
+      <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.warning}}>{myPendingApprovals.length} request{myPendingApprovals.length>1?'s':''} waiting for your approval</div><div style={{fontSize:11,color:C.t2,marginTop:1}}>{myPendingApprovals.map(r=>r.id).join(', ')}</div></div>
+    </div>}
+
+    <div style={{display:'flex',gap:0,marginBottom:12,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:3,width:'fit-content'}}>
+      {[['list','📋 All Requests'],['approvals','⏳ Pending Approvals']].map(([v,l])=><button key={v} onClick={()=>setTab(v)} style={{padding:'5px 12px',borderRadius:5,border:'none',background:tab===v?C.primary:'transparent',color:tab===v?'#fff':C.t2,fontSize:11,fontWeight:tab===v?700:400,cursor:'pointer'}}>{l}{v==='approvals'&&myPendingApprovals.length>0?<span style={{marginLeft:5,background:'#fff',color:C.primary,borderRadius:10,fontSize:9,padding:'1px 5px',fontWeight:800}}>{myPendingApprovals.length}</span>:''}</button>)}
+    </div>
+
+    {tab==='approvals'&&<div>
+      {myPendingApprovals.length===0?<div style={{padding:40,textAlign:'center',color:C.t3,fontSize:13,background:C.card,borderRadius:8,border:`1px solid ${C.border}`}}>No pending approvals</div>:
+      myPendingApprovals.map(req=><div key={req.id} style={{background:C.card,borderRadius:8,border:`1px solid #FDE68A`,padding:14,marginBottom:10,cursor:'pointer'}} onClick={()=>setVR(req)}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
+          <div style={{flex:1}}>
+            <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:4,flexWrap:'wrap'}}>
+              <span style={{fontSize:11,fontFamily:'monospace',color:C.primary,fontWeight:800}}>{req.id}</span>
+              <StatusPill status={req.status}/>
+              <PrioBadge p={req.priority}/>
+            </div>
+            <div style={{fontSize:13,fontWeight:700,color:C.t1,marginBottom:2}}>{req.title}</div>
+            <div style={{fontSize:11,color:C.t2}}>Requested by {users.find(u=>u.id===req.reqBy)?.name||'Unknown'} · {req.reqDate}</div>
+          </div>
+          <Btn size="sm" onClick={e=>{e.stopPropagation();setVR(req);}}>Review →</Btn>
+        </div>
+      </div>)}
+    </div>}
+
+    {tab==='list'&&<>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:10,marginBottom:10,display:'flex',gap:8,flexWrap:'wrap'}}>
+        <div style={{flex:1,minWidth:180}}><Input placeholder="Search ID or title…" value={search} onChange={v=>setSearch(v)}/></div>
+        <Select value={fType} onChange={setFT} opts={[{v:'',l:'All Types'},...IMAC_TYPES.map(t=>({v:t,l:t}))]} sx={{minWidth:120}}/>
+        <Select value={fStatus} onChange={setFS} opts={[{v:'',l:'All Status'},{v:'L1 Pending',l:'L1 Pending'},{v:'L2 Pending',l:'L2 Pending'},{v:'L3 Pending',l:'L3 Pending'},{v:'Approved',l:'Approved'},{v:'Completed',l:'Completed'},{v:'Rejected',l:'Rejected'}]} sx={{minWidth:140}}/>
+        <Select value={fPrio} onChange={setFP} opts={[{v:'',l:'All Priority'},...PRIORITY_OPTS.map(p=>({v:p,l:p}))]} sx={{minWidth:130}}/>
+        {(search||fType||fStatus||fPrio)&&<Btn variant="outline" size="sm" onClick={()=>{setSearch('');setFT('');setFS('');setFP('');}}>Clear ×</Btn>}
+      </div>
+      <div style={{background:C.card,borderRadius:8,border:`1px solid ${C.border}`,overflow:'hidden'}}>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',minWidth:780}}>
+            <thead><tr style={{background:'#F8FAFC',borderBottom:`1px solid ${C.border}`}}>
+              {['ID','Type','Title','Requested By','Status','Priority','Target Date','Actions'].map(h=><th key={h} style={{padding:'8px 11px',fontSize:9,fontWeight:800,color:C.t3,textAlign:'left',letterSpacing:'0.07em',textTransform:'uppercase',borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'}}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {filtered.length===0&&<tr><td colSpan={8} style={{padding:40,textAlign:'center',color:C.t3,fontSize:12}}>No requests found</td></tr>}
+              {filtered.map(req=>{
+                const reqUser=users.find(u=>u.id===req.reqBy);
+                const hasPending=req.approvals?.some(a=>a.approver===me.id&&a.status==='Pending');
+                return <tr key={req.id} style={{borderBottom:`1px solid ${C.borderFaint}`,background:hasPending?'#FFFDF0':'transparent',cursor:'pointer',transition:'background .1s'}} onMouseEnter={e=>e.currentTarget.style.background=hasPending?'#FFF9E6':'#FAFBFF'} onMouseLeave={e=>e.currentTarget.style.background=hasPending?'#FFFDF0':'transparent'}>
+                  <td style={{padding:'9px 11px',fontFamily:'monospace',fontSize:11,color:C.primary,fontWeight:800,whiteSpace:'nowrap'}}>{req.id}</td>
+                  <td style={{padding:'9px 11px'}}><span style={{fontSize:12}}>{TypeIcon[req.type]||'📋'}</span> <span style={{fontSize:11,color:C.t2}}>{req.type}</span></td>
+                  <td style={{padding:'9px 11px',maxWidth:200}}><div style={{fontSize:11,fontWeight:600,color:C.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{req.title}</div><div style={{fontSize:9,color:C.t3}}>{req.category}</div></td>
+                  <td style={{padding:'9px 11px'}}><div style={{display:'flex',alignItems:'center',gap:5}}><Avatar name={reqUser?.name||'?'} size={18}/><span style={{fontSize:11,color:C.t2,whiteSpace:'nowrap'}}>{reqUser?.name||'—'}</span></div></td>
+                  <td style={{padding:'9px 11px'}}><StatusPill status={req.status}/>{hasPending&&<span style={{display:'block',fontSize:9,color:C.warning,fontWeight:700,marginTop:2}}>⏳ Your action</span>}</td>
+                  <td style={{padding:'9px 11px'}}><PrioBadge p={req.priority}/></td>
+                  <td style={{padding:'9px 11px',fontSize:11,color:C.t2,whiteSpace:'nowrap'}}>{req.targetDate}</td>
+                  <td style={{padding:'9px 11px'}}><Btn size="sm" variant="ghost" onClick={()=>setVR(req)}>View →</Btn></td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>}
+
+    {/* New Request Modal */}
+    <Modal open={showNew} title="New IMAC Request" onClose={()=>setSN(false)} width={580}><IMACForm/></Modal>
+
+    {/* View/Approve Request Modal */}
+    <Modal open={!!viewReq} title={viewReq?.id||''} onClose={()=>setVR(null)} width={620}>
+      {viewReq&&(()=>{
+        const reqUser=users.find(u=>u.id===viewReq.reqBy);
+        return <div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:14}}>
+            <StatusPill status={viewReq.status}/><PrioBadge p={viewReq.priority}/>
+            <span style={{fontSize:11,color:C.primary,fontWeight:700,background:C.primaryLt,padding:'2px 7px',borderRadius:20}}>{viewReq.type}</span>
+            <span style={{fontSize:11,color:C.t2,background:'#F1F5F9',padding:'2px 7px',borderRadius:20}}>{viewReq.category}</span>
+          </div>
+          <h3 style={{fontSize:15,fontWeight:800,color:C.t1,margin:'0 0 8px'}}>{viewReq.title}</h3>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+            {[['Requested By',reqUser?.name||'—'],['Request Date',viewReq.reqDate],['Target Date',viewReq.targetDate],['Asset / Item',viewReq.asset||'—']].map(([k,v])=>(
+              <div key={k} style={{background:'#F8FAFC',borderRadius:6,padding:'7px 10px'}}><div style={{fontSize:9,color:C.t3,marginBottom:2}}>{k}</div><div style={{fontSize:11,fontWeight:600,color:C.t1}}>{v}</div></div>
+            ))}
+          </div>
+          <div style={{marginBottom:10,background:'#F8FAFC',borderRadius:6,padding:'9px 11px'}}><div style={{fontSize:9,color:C.t3,marginBottom:3}}>DESCRIPTION</div><div style={{fontSize:12,color:C.t1,lineHeight:1.6}}>{viewReq.desc}</div></div>
+          <div style={{marginBottom:14,background:'#F8FAFC',borderRadius:6,padding:'9px 11px'}}><div style={{fontSize:9,color:C.t3,marginBottom:3}}>BUSINESS JUSTIFICATION</div><div style={{fontSize:12,color:C.t1,lineHeight:1.6}}>{viewReq.justification}</div></div>
+
+          {/* 3-Level Approval Tracker */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:800,color:C.t1,marginBottom:8}}>📊 Approval Progress</div>
+            <div style={{display:'flex',alignItems:'flex-start',gap:0,position:'relative'}}>
+              <div style={{position:'absolute',top:20,left:'16.5%',width:'67%',height:2,background:'#E2E8F0',zIndex:0}}/>
+              {viewReq.approvals.map((a,i)=>{
+                const approver=users.find(u=>u.id===a.approver);
+                const sc={Approved:{ic:'✓',bg:C.success,bdr:C.success},Rejected:{ic:'✗',bg:C.danger,bdr:C.danger},Pending:{ic:String(i+1),bg:'#fff',bdr:C.border}};
+                const s=sc[a.status]||sc.Pending;
+                return <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:5,position:'relative',zIndex:1}}>
+                  <div style={{width:40,height:40,borderRadius:'50%',background:s.bg,border:`2px solid ${s.bdr}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:a.status==='Pending'?C.t3:'#fff',fontWeight:800}}>{s.ic}</div>
+                  <div style={{textAlign:'center'}}>
+                    <div style={{fontSize:9,fontWeight:800,color:C.t3,letterSpacing:'0.08em'}}>LEVEL {i+1}</div>
+                    <div style={{fontSize:10,fontWeight:700,color:C.t1}}>{approver?.name||'—'}</div>
+                    <div style={{fontSize:9,color:C.t2}}>{approver?.title||'—'}</div>
+                    <StatusPill status={a.status} size={9}/>
+                    {a.date&&<div style={{fontSize:9,color:C.t3,marginTop:2}}>{a.date}</div>}
+                    {a.comment&&<div style={{fontSize:9,color:C.t2,marginTop:2,background:'#F8FAFC',padding:'3px 6px',borderRadius:4,maxWidth:100,textAlign:'center'}}>"{a.comment}"</div>}
+                  </div>
+                </div>;
+              })}
+            </div>
+          </div>
+
+          <ApprovalPane req={viewReq}/>
+
+          {/* Activity History */}
+          <div style={{marginTop:14}}>
+            <div style={{fontSize:11,fontWeight:800,color:C.t1,marginBottom:8}}>📜 Activity History</div>
+            <div style={{maxHeight:160,overflowY:'auto'}}>
+              {[...viewReq.history].reverse().map((h,i)=>{
+                const actor=users.find(u=>u.id===h.by);
+                return <div key={i} style={{display:'flex',gap:8,marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${C.borderFaint}`}}>
+                  <Avatar name={actor?.name||h.by} size={24}/>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}><span style={{fontSize:11,fontWeight:700,color:C.t1}}>{actor?.name||h.by}</span><span style={{fontSize:10,color:C.t3}}>· {h.at}</span></div>
+                    <div style={{fontSize:11,color:C.primary,fontWeight:600}}>{h.action}</div>
+                    {h.note&&<div style={{fontSize:10,color:C.t2,marginTop:1}}>{h.note}</div>}
+                  </div>
+                </div>;
+              })}
+            </div>
+          </div>
+
+          {(me.role==='SERVICE_MANAGER'||me.role==='SUPER_ADMIN')&&viewReq.status==='Approved'&&<div style={{marginTop:12,display:'flex',gap:8}}>
+            <Btn variant="success" onClick={()=>{setImacList(p=>p.map(r=>r.id===viewReq.id?{...r,status:'In Progress',history:[...r.history,{action:'In Progress',by:me.id,at:now(),note:'Implementation started'}]}:r));setVR(prev=>({...prev,status:'In Progress'}));addToast('success','Marked as In Progress');}}>▶ Start Implementation</Btn>
+            <Btn variant="outline" onClick={()=>{setImacList(p=>p.map(r=>r.id===viewReq.id?{...r,status:'Completed',history:[...r.history,{action:'Completed',by:me.id,at:now(),note:'Request fulfilled and closed.'}]}:r));setVR(prev=>({...prev,status:'Completed'}));addToast('success','Request Completed');}}>✓ Mark Completed</Btn>
+          </div>}
+        </div>;
+      })()}
+    </Modal>
+  </div>;
+};
+
+// ─── MODULE SHELL ─────────────────────────────────
+const Shell=({module})=>{
+  const M={incidents:{t:'Incident Management',icon:'🚨',color:C.danger,pt:'Part 3'},service_req:{t:'Service Request Management',icon:'📋',color:C.success,pt:'Part 3'},problems:{t:'Problem Management',icon:'🔍',color:C.warning,pt:'Part 4'},changes:{t:'Change Management',icon:'🔧',color:C.purple,pt:'Part 4'},cmdb:{t:'Asset & Configuration Management',icon:'🖥️',color:C.cyan,pt:'Part 5'},knowledge:{t:'Knowledge Base',icon:'📚',color:C.success,pt:'Part 6'},sla:{t:'SLA & Escalation',icon:'⏱️',color:C.warning,pt:'Part 6'},reports:{t:'Reports & Analytics',icon:'📊',color:C.purple,pt:'Part 7'},users:{t:'User Management',icon:'🔐',color:C.primary,pt:'Part 1 ✓'}};
+  const c=M[module]||M.incidents;
+  return <div style={{padding:24,display:'flex',alignItems:'center',justifyContent:'center',minHeight:'calc(100vh - 110px)'}}>
+    <div style={{textAlign:'center',maxWidth:440}}>
+      <div style={{width:70,height:70,borderRadius:18,background:`${c.color}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:34,margin:'0 auto 16px'}}>{c.icon}</div>
+      <h2 style={{fontSize:20,fontWeight:800,color:C.t1,margin:'0 0 8px'}}>{c.t}</h2>
+      <div style={{background:`${c.color}0D`,border:`1px dashed ${c.color}60`,borderRadius:8,padding:'12px 16px',display:'inline-flex',alignItems:'center',gap:10,marginTop:12}}>
+        <span style={{fontSize:18}}>🔨</span>
+        <div style={{textAlign:'left'}}><div style={{fontSize:10,fontWeight:800,color:c.color}}>COMING IN {c.pt}</div><div style={{fontSize:10,color:C.t2,marginTop:1}}>Module is architected. Building in next phase.</div></div>
+      </div>
+    </div>
+  </div>;
+};
+
+// ─── LOGIN ────────────────────────────────────────
+const Login=({onLogin,users})=>{
+  const[email,setEmail]=useState('');
+  const[pw,setPw]=useState('');
+  const[loading,setL]=useState(false);
+  const[err,setErr]=useState('');
+  const[sel,setSel]=useState(null);
+  const DEMOS=[{r:'SUPER_ADMIN',e:'superadmin@itsm.com',p:'Admin@123'},{r:'ADMIN',e:'admin@itsm.com',p:'Admin@123'},{r:'EMPLOYEE',e:'employee@company.com',p:'Employee@123'},{r:'HELPDESK',e:'helpdesk@company.com',p:'Helpdesk@123'},{r:'AGENT',e:'agent@company.com',p:'Agent@123'},{r:'SERVICE_MANAGER',e:'manager@company.com',p:'Manager@123'}];
+  const fill=d=>{setEmail(d.e);setPw(d.p);setSel(d.r);setErr('');};
+  const sub=e=>{e.preventDefault();if(!email||!pw){setErr('Enter email and password');return;}setL(true);setTimeout(()=>{const u=users.find(x=>x.email===email&&x.pw===pw);if(!u){setErr('Invalid credentials');setL(false);return;}if(u.status==='inactive'){setErr('Account deactivated');setL(false);return;}onLogin(u);},600);};
+  return <div style={{minHeight:'100vh',display:'flex',background:C.bg}}>
+    <div style={{width:'42%',background:'linear-gradient(150deg,#0D1B2A,#0F2540 60%,#1A3A6C)',display:'flex',flexDirection:'column',justifyContent:'space-between',padding:40,overflow:'hidden',position:'relative'}}>
+      <div style={{position:'absolute',top:-60,left:-60,width:260,height:260,borderRadius:'50%',background:'rgba(37,99,235,0.07)'}}/>
+      <div><div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:36,height:36,borderRadius:8,background:C.primary,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>⚡</div><div><div style={{fontSize:17,fontWeight:800,color:'#fff'}}>ITSM<span style={{color:'#60A5FA'}}>Pro</span></div><div style={{fontSize:8,color:'#475569',letterSpacing:'0.1em',textTransform:'uppercase'}}>Enterprise Service Mgmt</div></div></div></div>
+      <div>
+        <div style={{fontSize:10,fontWeight:700,color:C.primary,letterSpacing:'0.1em',marginBottom:6}}>🎉 Part 2 Build</div>
+        <h1 style={{fontSize:28,fontWeight:800,color:'#fff',margin:'0 0 12px',lineHeight:1.2}}>Employee & IMAC<br/><span style={{color:'#60A5FA'}}>Management</span></h1>
+        {['Org Hierarchy & Tree View','3-Level IMAC Approval Chain','Employee Onboarding Wizard','Department Overview','Full Profile Management'].map((f,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}><div style={{width:16,height:16,borderRadius:'50%',background:'rgba(37,99,235,0.2)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><div style={{width:5,height:5,borderRadius:'50%',background:'#60A5FA'}}/></div><span style={{fontSize:12,color:'#94A3B8'}}>{f}</span></div>)}
+      </div>
+      <div style={{display:'flex',gap:24,borderTop:'1px solid rgba(255,255,255,0.07)',paddingTop:18}}>{[['10+','Employees'],['3','Approval Levels'],['4','IMAC Types']].map(([v,l])=><div key={l}><div style={{fontSize:16,fontWeight:800,color:'#fff'}}>{v}</div><div style={{fontSize:10,color:'#475569'}}>{l}</div></div>)}</div>
+    </div>
+    <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:'40px 50px'}}>
+      <div style={{width:'100%',maxWidth:380}}>
+        <h2 style={{fontSize:22,fontWeight:800,color:C.t1,margin:'0 0 4px'}}>Sign In</h2>
+        <p style={{fontSize:12,color:C.t2,margin:'0 0 18px'}}>ITSM Pro — Part 2 Build</p>
+        <div style={{background:'#F8FAFC',border:`1px solid ${C.border}`,borderRadius:8,padding:12,marginBottom:18}}>
+          <p style={{fontSize:9,fontWeight:800,color:C.t3,letterSpacing:'0.1em',textTransform:'uppercase',margin:'0 0 7px'}}>Quick Login</p>
+          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+            {DEMOS.map(d=>{const m=ROLE_META[d.r];const a=sel===d.r;return <button key={d.r} onClick={()=>fill(d)} style={{padding:'3px 8px',borderRadius:20,fontSize:10,fontWeight:700,border:`1px solid ${a?m.color:m.border}`,background:a?m.bg:'#fff',color:a?m.color:C.t2,cursor:'pointer'}}>{m.label}</button>;})}
+          </div>
+        </div>
+        <form onSubmit={sub} style={{display:'flex',flexDirection:'column',gap:11}}>
+          <Input label="Email" type="email" value={email} onChange={setEmail} required placeholder="you@company.com"/>
+          <Input label="Password" type="password" value={pw} onChange={setPw} required placeholder="Password"/>
+          {err&&<div style={{padding:'8px 11px',background:C.dangerLt,border:`1px solid #FECACA`,borderRadius:6,fontSize:12,color:C.danger}}>⚠ {err}</div>}
+          <Btn type="submit" size="lg" disabled={loading} sx={{width:'100%',justifyContent:'center',marginTop:3}}>{loading?'Signing in…':'Sign In →'}</Btn>
+        </form>
+      </div>
+    </div>
+  </div>;
+};
+
+// ─── MAIN APP ─────────────────────────────────────
+function App(){
+  const[user,setUser]=useState(null);
+  const[users,setUsers]=useState(SEED_USERS);
+  const[imacList,setImacList]=useState(SEED_IMAC);
+  const[active,setActive]=useState('dashboard');
+  const[col,setCol]=useState(false);
+  const[toasts,setToasts]=useState([]);
+
+  const addToast=(type,msg)=>{const id=Date.now();setToasts(p=>[...p,{id,type,msg}]);setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),4200);};
+  const currentUser=useMemo(()=>users.find(u=>u.id===user?.id)||user,[users,user]);
+  const login=u=>{setUser(u);setActive('dashboard');addToast('success',`Welcome, ${u.name}!`);};
+  const logout=()=>{setUser(null);setActive('dashboard');};
+
+  if(!user)return <Login onLogin={login} users={users}/>;
+
+  const sw=col?56:230;
+  const renderModule=()=>{
+    if(active==='dashboard')return <Dashboard user={currentUser} users={users} imacList={imacList}/>;
+    if(active==='employees')return <EmployeeModule me={currentUser} users={users} setUsers={setUsers} addToast={addToast}/>;
+    if(active==='imac')return <IMACModule me={currentUser} users={users} imacList={imacList} setImacList={setImacList} addToast={addToast}/>;
+    return <Shell module={active}/>;
+  };
+
+  return <div style={{display:'flex',minHeight:'100vh'}}>
+    <Sidebar user={currentUser} active={active} onNav={m=>setActive(m)} col={col} setCol={setCol}/>
+    <div style={{marginLeft:sw,flex:1,transition:'margin-left .2s',display:'flex',flexDirection:'column',minHeight:'100vh'}}>
+      <Header user={currentUser} active={active} onLogout={logout} onProfile={()=>setActive('profile')}/>
+      <main style={{flex:1,overflowY:'auto'}}>{renderModule()}</main>
+    </div>
+    <Toast toasts={toasts} rem={id=>setToasts(p=>p.filter(t=>t.id!==id))}/>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
