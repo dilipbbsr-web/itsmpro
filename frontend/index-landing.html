@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ITSMPro - Enterprise IT Service Management Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-dark: #0f1d2d;
+            --secondary-dark: #1a2f42;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --accent-purple: #8b5cf6;
+            --accent-orange: #f97316;
+            --text-primary: #e0e7ff;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, #1a2f42 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 80px;
+            animation: slideDown 0.8s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo-section {
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 48px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+        }
+
+        .logo-icon {
+            font-size: 56px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.05); }
+        }
+
+        .logo-text {
+            background: linear-gradient(135deg, #3b82f6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .tagline {
+            font-size: 24px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            font-weight: 300;
+            letter-spacing: 0.5px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Module Prototypes */
+        .section {
+            margin-bottom: 80px;
+        }
+
+        .section-title {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 40px;
+            text-align: center;
+            color: var(--text-primary);
+        }
+
+        .modules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 28px;
+            margin-bottom: 60px;
+        }
+
+        .module-card {
+            background: linear-gradient(135deg, rgba(26, 47, 66, 0.8) 0%, rgba(30, 58, 80, 0.8) 100%);
+            border: 2px solid var(--border-color);
+            border-radius: 16px;
+            padding: 32px;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
+            position: relative;
+            overflow: hidden;
+            text-decoration: none;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            animation: fadeInUp 0.6s ease-out both;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modules-grid > .module-card:nth-child(1) { animation-delay: 0.1s; }
+        .modules-grid > .module-card:nth-child(2) { animation-delay: 0.2s; }
+        .modules-grid > .module-card:nth-child(3) { animation-delay: 0.3s; }
+        .modules-grid > .module-card:nth-child(4) { animation-delay: 0.4s; }
+        .modules-grid > .module-card:nth-child(5) { animation-delay: 0.5s; }
+        .modules-grid > .module-card:nth-child(6) { animation-delay: 0.6s; }
+        .modules-grid > .module-card:nth-child(7) { animation-delay: 0.7s; }
+
+        .module-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .module-card:hover {
+            border-color: var(--accent-blue);
+            background: linear-gradient(135deg, rgba(26, 47, 66, 1) 0%, rgba(30, 58, 80, 1) 100%);
+            box-shadow: 0 12px 48px rgba(59, 130, 246, 0.3);
+            transform: translateY(-12px);
+        }
+
+        .module-card:hover::before {
+            left: 100%;
+        }
+
+        .module-number {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .module-icon {
+            font-size: 56px;
+            margin-bottom: 20px;
+            display: block;
+            transition: transform 0.3s ease;
+        }
+
+        .module-card:hover .module-icon {
+            transform: scale(1.15) rotate(8deg);
+        }
+
+        .module-title {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .module-description {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 20px;
+            flex-grow: 1;
+        }
+
+        .module-features {
+            font-size: 12px;
+            color: var(--text-secondary);
+            background: rgba(59, 130, 246, 0.1);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .module-link {
+            display: inline-block;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            color: white;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            align-self: flex-start;
+        }
+
+        .module-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(59, 130, 246, 0.4);
+        }
+
+        /* Stats Section */
+        .stats-section {
+            background: linear-gradient(135deg, rgba(26, 47, 66, 0.6) 0%, rgba(30, 58, 80, 0.6) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 40px;
+            margin: 60px 0;
+            text-align: center;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .stat-box {
+            animation: fadeIn 0.8s ease-out backwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .stat-box:nth-child(1) { animation-delay: 0.2s; }
+        .stat-box:nth-child(2) { animation-delay: 0.3s; }
+        .stat-box:nth-child(3) { animation-delay: 0.4s; }
+        .stat-box:nth-child(4) { animation-delay: 0.5s; }
+
+        .stat-number {
+            font-size: 36px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Features Grid */
+        .features-section {
+            margin-bottom: 60px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 24px;
+        }
+
+        .feature-card {
+            background: rgba(26, 47, 66, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            transition: all 0.3s ease;
+            animation: slideInRight 0.6s ease-out backwards;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .feature-card:nth-child(1) { animation-delay: 0.1s; }
+        .feature-card:nth-child(2) { animation-delay: 0.2s; }
+        .feature-card:nth-child(3) { animation-delay: 0.3s; }
+        .feature-card:nth-child(4) { animation-delay: 0.4s; }
+        .feature-card:nth-child(5) { animation-delay: 0.5s; }
+        .feature-card:nth-child(6) { animation-delay: 0.6s; }
+
+        .feature-card:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(6, 182, 212, 0.1);
+            transform: translateY(-6px);
+        }
+
+        .feature-icon {
+            font-size: 32px;
+            margin-bottom: 16px;
+        }
+
+        .feature-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--text-primary);
+        }
+
+        .feature-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding-top: 40px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 13px;
+            margin-top: 80px;
+        }
+
+        .footer p {
+            margin: 8px 0;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .logo {
+                font-size: 36px;
+            }
+
+            .tagline {
+                font-size: 18px;
+            }
+
+            .modules-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .section-title {
+                font-size: 22px;
+            }
+
+            .header {
+                margin-bottom: 60px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo-section">
+                <div class="logo">
+                    <span class="logo-icon">⚡</span>
+                    <span class="logo-text">ITSMPro</span>
+                </div>
+                <div class="tagline">Enterprise IT Service Management</div>
+                <div class="subtitle">All 7 Modules • Interactive Prototypes</div>
+            </div>
+        </div>
+
+        <!-- Module Prototypes -->
+        <section class="section">
+            <h2 class="section-title">📚 Module Prototypes</h2>
+            <div class="modules-grid">
+                <!-- Part 1 -->
+                <a href="itsmpro_part1_foundation.html" class="module-card">
+                    <div class="module-number">Part 1</div>
+                    <span class="module-icon">🔐</span>
+                    <h3 class="module-title">Foundation & Auth</h3>
+                    <p class="module-description">Core authentication and user management layer for the entire platform.</p>
+                    <div class="module-features">Authentication • JWT • RBAC • User Management</div>
+                    <span class="module-link">View Module →</span>
+                </a>
+
+                <!-- Part 2 -->
+                <a href="itsmpro_part2_employee_imac.html" class="module-card">
+                    <div class="module-number">Part 2</div>
+                    <span class="module-icon">👥</span>
+                    <h3 class="module-title">Employee & IMAC</h3>
+                    <p class="module-description">Employee lifecycle management and IT asset provisioning workflows.</p>
+                    <div class="module-features">Employee Mgmt • Org Chart • IMAC • Approval</div>
+                    <span class="module-link">View Module →</span>
+                </a>
+
+                <!-- Part 3 -->
+                <a href="itsmpro_part3_incidents_s.html" class="module-card">
+                    <div class="module-number">Part 3</div>
+                    <span class="module-icon">🚨</span>
+                    <h3 class="module-title">Incidents & Service</h3>
+                    <p class="module-description">Incident management and service request handling with SLA tracking.</p>
+                    <div class="module-features">Incidents • Requests • SLA • Catalog</div>
+                    <span class="module-link">View Module →</span>
+                </a>
+
+                <!-- Part 4 -->
+                <a href="itsmpro_part4_problem_change.html" class="module-card">
+                    <div class="module-number">Part 4</div>
+                    <span class="module-icon">🔧</span>
+                    <h3 class="module-title">Problem & Change</h3>
+                    <p class="module-description">Root cause analysis and change management with CAB vetting.</p>
+                    <div class="module-features">RCA • KEDB • CAB • Change Mgmt</div>
+                    <span class="module-link">View Module →</span>
+                </a>
+
+                <!-- Part 5 -->
+                <a href="itsmpro_part5_asset_cmdb.html" class="module-card">
+                    <div class="module-number">Part 5</div>
+                    <span class="module-icon">💾</span>
+                    <h3 class="module-title">Asset & CMDB</h3>
+                    <p class="module-description">Configuration management database with asset tracking and topology.</p>
+                    <div class="module-features">Config Items • Topology • License Mgmt</div>
+                    <span class="module-link">View Module →</span>
+                </a>
+
+                <!-- Part 6 -->
+                <a href="itsmpro_part6_kb_sla.html" class="module-card">
+                    <div class="module-number">Part 6</div>
+                    <span class="module-icon">📖</span>
+                    <h3 class="module-title">Knowledge Base & SLA</h3>
+                    <p class="module-description">Self-service knowledge articles with escalation and SLA policies.</p>
+                    <div class="module-features">KB Articles • SLA Policies • Escalations</div>
+                    <span class="module-link">View Module →</span>
+                </a>
+
+                <!-- Part 7 -->
+                <a href="itsmpro_part7_reports.html" class="module-card">
+                    <div class="module-number">Part 7</div>
+                    <span class="module-icon">📊</span>
+                    <h3 class="module-title">Reports & Integrations</h3>
+                    <p class="module-description">Analytics, reporting templates, and third-party integrations.</p>
+                    <div class="module-features">Analytics • Templates • Connectors</div>
+                    <span class="module-link">View Module →</span>
+                </a>
+            </div>
+        </section>
+
+        <!-- Stats -->
+        <section class="stats-section">
+            <h2 class="section-title">Platform Overview</h2>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-number">7</div>
+                    <div class="stat-label">Core Modules</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number">50+</div>
+                    <div class="stat-label">Features</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number">99.9%</div>
+                    <div class="stat-label">Uptime SLA</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number">24/7</div>
+                    <div class="stat-label">Support</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Key Features -->
+        <section class="features-section">
+            <h2 class="section-title">⭐ Key Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🔐</div>
+                    <div class="feature-title">Enterprise Security</div>
+                    <div class="feature-desc">Multi-factor authentication, SSO, encryption, and compliance auditing.</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <div class="feature-title">Advanced Analytics</div>
+                    <div class="feature-desc">Real-time dashboards, custom reports, and predictive insights.</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔄</div>
+                    <div class="feature-title">Workflow Automation</div>
+                    <div class="feature-desc">Intelligent automation, approval workflows, and escalations.</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔗</div>
+                    <div class="feature-title">Integration Ready</div>
+                    <div class="feature-desc">REST APIs, webhooks, and pre-built connectors for popular tools.</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📱</div>
+                    <div class="feature-title">Mobile First</div>
+                    <div class="feature-desc">Responsive design, native apps, and offline capabilities.</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🌍</div>
+                    <div class="feature-title">Global Scale</div>
+                    <div class="feature-desc">Multi-tenant architecture, localization, and global infrastructure.</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>ITSMPro</strong> — Enterprise IT Service Management Platform</p>
+            <p>© 2024 ITSMPro. All rights reserved. | Part of the Complete ITSM Suite</p>
+        </div>
+    </div>
+</body>
+</html>
