@@ -7,6 +7,7 @@ const incidentRoutes = require('./routes/incidents');
 const serviceRequestRoutes = require('./routes/serviceRequests');
 const problemRoutes = require('./routes/problems');
 const changeRoutes = require('./routes/changes');
+const assetRoutes = require('./routes/assets');
 const pool = require('./config/database');
 
 const app = express();
@@ -30,6 +31,7 @@ app.use('/api/v1/incidents', incidentRoutes);
 app.use('/api/v1/service-requests', serviceRequestRoutes);
 app.use('/api/v1/problems', problemRoutes);
 app.use('/api/v1/changes', changeRoutes);
+app.use('/api/v1/assets', assetRoutes);
 // Health check
 app.get('/api/v1/health', (req, res) => {
   res.json({ 
