@@ -1,0 +1,23 @@
+{
+  "name": "itsmpro",
+  "version": "1.0.0",
+  "description": "> Full-stack, production-ready ITSM platform — 7 modules, 6 roles, zero proprietary dependencies.",
+  "main": "ecosystem.config.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dilipbbsr-web/itsmpro.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dilipbbsr-web/itsmpro/issues"
+  },
+  "homepage": "https://github.com/dilipbbsr-web/itsmpro#readme"
+}
